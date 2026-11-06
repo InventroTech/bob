@@ -12,6 +12,9 @@ import type { AddUserModel } from './useAddUser';
 import type { User } from './types';
 import { formatResolveRateGoal, isCseRole } from './utils';
 import { useUserManagementConfig } from './useUserManagementConfig';
+import { DeleteUserDialog } from './DeleteUserDialog';
+import { DeletedUsersDialog } from './DeletedUsersDialog';
+import { useDeleteUserFlow } from './useDeleteUserFlow';
 import {
   getColumnLabel,
   isBoundCustomField,
@@ -806,7 +809,8 @@ export function AddUserView(props: AddUserModel) {
                     variant="outline"
                     size="icon"
                     className="h-8 w-8 text-destructive"
-                    onClick={() => handleDeleteUser(user.email, user.uid)}
+                    aria-label={`Delete ${user.email}`}
+                    onClick={() => requestDelete(user)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -1430,6 +1434,20 @@ export function AddUserView(props: AddUserModel) {
                     </button>
                   );
                 })}
+                <DeletedUsersDialog
+                  refreshKey={deletedRefreshKey}
+                  trigger={
+                    <button
+                      type="button"
+                      className={cn(
+                        'h-full rounded px-3 text-sm font-medium leading-none',
+                        isUnmannd ? 'text-[#333C4E] hover:bg-[#EDF2FA]' : 'text-black hover:bg-gray-100'
+                      )}
+                    >
+                      Deleted
+                    </button>
+                  }
+                />
               </div>
             </div>
             <div
@@ -1723,7 +1741,8 @@ export function AddUserView(props: AddUserModel) {
                             variant="outline"
                             size="icon"
                             className="text-red-500 border-red-200"
-                            onClick={() => handleDeleteUser(user.email, user.uid)}
+                            aria-label={`Delete ${user.email}`}
+                            onClick={() => requestDelete(user)}
                             disabled={editingRowKey === getRowKey(user)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1806,6 +1825,11 @@ export function AddUserView(props: AddUserModel) {
         </div>
       </CardContent>
     </Card>
+    <DeleteUserDialog
+      user={pendingDelete}
+      onCancel={cancelDelete}
+      onConfirm={confirmDelete}
+    />
     </div>
   );
 }
