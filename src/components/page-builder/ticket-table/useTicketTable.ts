@@ -89,11 +89,13 @@ const [filterOptions, setFilterOptions] = useState<{
 });
 const { session, user } = useAuth();
 const { customRole, membershipLoaded } = useTenant();
-// Only the All Support Tickets page lists every ticket; WIP / Not Connected pages use their own endpoints.
-const isAllTicketsList = (config?.apiEndpoint ?? '').replace(/\/+$/, '').endsWith('/analytics/support-ticket');
-// On that page, CSE users only see tickets after applying at least one filter (search alone doesn't count).
-const requireFiltersToShow = isAllTicketsList && customRole?.toUpperCase() === 'CSE';
-const roleReadyForList = !isAllTicketsList || membershipLoaded;
+// Page Builder setting: list stays empty until a filter is applied, for the chosen roles (none = everyone).
+const filtersRequiredOnTable = config?.requireFiltersBeforeShowing === true;
+const filtersRequiredRoles = (config?.requireFiltersRoles ?? []).map((key) => key.toUpperCase());
+const requireFiltersToShow =
+  filtersRequiredOnTable &&
+  (filtersRequiredRoles.length === 0 || filtersRequiredRoles.includes(customRole?.toUpperCase() ?? ''));
+const roleReadyForList = !filtersRequiredOnTable || membershipLoaded;
 const hasSelectedFilters =
   resolutionStatusFilter.length > 0 ||
   assignedToFilter !== 'all' ||
