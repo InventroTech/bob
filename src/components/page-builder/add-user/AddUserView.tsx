@@ -12,8 +12,7 @@ import type { AddUserModel } from './useAddUser';
 import type { User } from './types';
 import { formatResolveRateGoal, isCseRole } from './utils';
 import { useUserManagementConfig } from './useUserManagementConfig';
-import { DeleteUserDialog } from './DeleteUserDialog';
-import { DeletedUsersDialog } from './DeletedUsersDialog';
+import { DownloadDeletedUsersButton } from './DownloadDeletedUsersButton';
 import { useDeleteUserFlow } from './useDeleteUserFlow';
 import {
   getColumnLabel,
@@ -228,7 +227,7 @@ export function AddUserView(props: AddUserModel) {
   );
   const customTableFields = schema.customFields.filter((f) => f.showInTable);
   const [activityFilter, setActivityFilter] = useState<'all' | 'inactive'>('all');
-  const { pendingDelete, deletedRefreshKey, requestDelete, cancelDelete, confirmDelete } = useDeleteUserFlow({
+  const { deletingEmail, deleteUser } = useDeleteUserFlow({
     users,
     currentUserEmail: props.session?.user?.email,
     tenantSlug,
@@ -820,7 +819,8 @@ export function AddUserView(props: AddUserModel) {
                     size="icon"
                     className="h-8 w-8 text-destructive"
                     aria-label={`Delete ${user.email}`}
-                    onClick={() => requestDelete(user)}
+                    onClick={() => void deleteUser(user)}
+                    disabled={deletingEmail === user.email}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -1444,25 +1444,11 @@ export function AddUserView(props: AddUserModel) {
                     </button>
                   );
                 })}
-                <DeletedUsersDialog
-                  refreshKey={deletedRefreshKey}
-                  trigger={
-                    <button
-                      type="button"
-                      className={cn(
-                        'h-full rounded px-3 text-sm font-medium leading-none',
-                        isUnmannd ? 'text-[#333C4E] hover:bg-[#EDF2FA]' : 'text-black hover:bg-gray-100'
-                      )}
-                    >
-                      Deleted
-                    </button>
-                  }
-                />
               </div>
             </div>
             <div
               className={cn(
-                'flex w-full flex-col gap-3 sm:max-w-lg sm:flex-row sm:items-center',
+                'flex w-full flex-col gap-3 sm:max-w-3xl sm:flex-row sm:items-center',
                 isUnmannd &&
                   'ml-auto flex w-auto max-w-none flex-nowrap flex-row items-center gap-2 sm:max-w-none'
               )}
@@ -1470,6 +1456,7 @@ export function AddUserView(props: AddUserModel) {
               <div
                 className={cn(
                   'relative flex h-11 w-full items-center sm:flex-1',
+                  !isUnmannd && 'sm:min-w-[20rem]',
                   isUnmannd && 'h-11 w-[min(100%,18rem)] shrink-0 sm:w-[18rem] sm:flex-none'
                 )}
               >
@@ -1511,6 +1498,14 @@ export function AddUserView(props: AddUserModel) {
                   {usersPdfLoading ? 'Generating…' : 'Download PDF'}
                 </span>
               </Button>
+              <DownloadDeletedUsersButton
+                variant={isUnmannd ? 'default' : 'outline'}
+                className={cn(
+                  'h-11 shrink-0 border-black text-black hover:bg-black hover:text-white inline-flex items-center justify-center',
+                  isUnmannd && cn(DOWNLOAD_PDF_BTN, 'h-11 self-center')
+                )}
+                iconClassName={isUnmannd ? 'mr-0 h-3.5 w-3.5' : 'mr-2 h-4 w-4'}
+              />
             </div>
           </div>
           {isLoading ? (
@@ -1752,8 +1747,8 @@ export function AddUserView(props: AddUserModel) {
                             size="icon"
                             className="text-red-500 border-red-200"
                             aria-label={`Delete ${user.email}`}
-                            onClick={() => requestDelete(user)}
-                            disabled={editingRowKey === getRowKey(user)}
+                            onClick={() => void deleteUser(user)}
+                            disabled={editingRowKey === getRowKey(user) || deletingEmail === user.email}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1835,11 +1830,6 @@ export function AddUserView(props: AddUserModel) {
         </div>
       </CardContent>
     </Card>
-    <DeleteUserDialog
-      user={pendingDelete}
-      onCancel={cancelDelete}
-      onConfirm={confirmDelete}
-    />
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 
-import type { PendingDelete } from './DeleteUserDialog';
-import { deleteUserWithLog } from './deleteUserWithLog';
+import { deleteErrorMessage, deleteUserWithLog } from './deleteUserWithLog';
 import type { User } from './types';
 
 interface UseDeleteUserFlowOptions {
@@ -12,32 +12,31 @@ interface UseDeleteUserFlowOptions {
   refresh: () => Promise<unknown>;
 }
 
-/** Delete-user state for the users table: which user is being deleted and the deleted-list refresh key. */
+/** Deletes a user straight from the trash button (no confirmation) and tracks who is being deleted. */
 export function useDeleteUserFlow({ users, currentUserEmail, tenantSlug, navigate, refresh }: UseDeleteUserFlowOptions) {
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
-  const [deletedRefreshKey, setDeletedRefreshKey] = useState(0);
+  const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
+  const inFlight = useRef(false);
 
-  const requestDelete = (user: User) =>
-    setPendingDelete({ email: user.email, uid: user.uid, name: user.name });
-
-  const cancelDelete = () => setPendingDelete(null);
-
-  const confirmDelete = async (reason: string | undefined) => {
-    if (!pendingDelete) return;
-    const deleted = await deleteUserWithLog({
-      email: pendingDelete.email,
-      roleId: users.find((u) => u.email === pendingDelete.email)?.role_id,
-      reason,
-      currentUserEmail,
-      tenantSlug,
-      navigate,
-      refresh,
-    });
-    if (deleted) {
-      setPendingDelete(null);
-      setDeletedRefreshKey((key) => key + 1);
+  const deleteUser = async (user: User) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setDeletingEmail(user.email);
+    try {
+      await deleteUserWithLog({
+        email: user.email,
+        roleId: user.role_id || users.find((u) => u.email === user.email)?.role_id,
+        currentUserEmail,
+        tenantSlug,
+        navigate,
+        refresh,
+      });
+    } catch (error) {
+      toast.error(deleteErrorMessage(error));
+    } finally {
+      inFlight.current = false;
+      setDeletingEmail(null);
     }
   };
 
-  return { pendingDelete, deletedRefreshKey, requestDelete, cancelDelete, confirmDelete };
+  return { deletingEmail, deleteUser };
 }
