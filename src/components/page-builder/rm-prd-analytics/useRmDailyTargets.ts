@@ -12,7 +12,7 @@ const EMPTY: RmDailyTargetsDto = {};
 // forces a refetch on demand (e.g. a periodic tick) even when bounds haven't
 // changed — a manager editing a target elsewhere (User Settings) otherwise
 // has no way to reach an already-open dashboard.
-export function useRmDailyTargets(bounds: DateBounds | null, refreshToken?: number, rmUserIds?: string[]) {
+export function useRmDailyTargets(bounds: DateBounds | null, refreshToken?: number) {
   const [targets, setTargets] = useState<RmDailyTargetsDto>(EMPTY);
   const [loading, setLoading] = useState(true);
 
@@ -23,10 +23,6 @@ export function useRmDailyTargets(bounds: DateBounds | null, refreshToken?: numb
   const from = bounds ? toLocalDateParam(bounds.from) : undefined;
   const to = bounds ? toLocalDateParam(bounds.to) : undefined;
   const hasWindow = bounds !== null;
-  // array identity changes every render even for the same contents — join
-  // to a primitive so the effect only refetches when the actual id set
-  // changes (same trick as useRmFilterOptions' managerRoleKeysKey)
-  const rmUserIdsKey = (rmUserIds ?? []).join(',');
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +35,7 @@ export function useRmDailyTargets(bounds: DateBounds | null, refreshToken?: numb
 
     setLoading(true);
     rmActivityApi
-      .getDailyTargets({ from, to, rmUserIds: rmUserIdsKey ? rmUserIdsKey.split(',') : undefined })
+      .getDailyTargets({ from, to })
       .then((dto) => {
         if (!cancelled) setTargets(dto);
       })
@@ -54,7 +50,7 @@ export function useRmDailyTargets(bounds: DateBounds | null, refreshToken?: numb
     return () => {
       cancelled = true;
     };
-  }, [hasWindow, from, to, rmUserIdsKey, refreshToken]);
+  }, [hasWindow, from, to, refreshToken]);
 
   return { targets, loading };
 }
