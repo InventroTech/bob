@@ -20,7 +20,6 @@ export const DELETED_USERS_PDF_HEADERS = [
   'Account created',
   'Deleted at',
   'Deleted by',
-  'Reason',
 ] as const;
 
 export function formatLogDate(value: string | null | undefined): string {
@@ -39,7 +38,6 @@ export function deletedUsersPdfRows(users: DeletedUser[]): string[][] {
     formatLogDate(user.created_at) || '—',
     formatLogDate(user.deleted_at) || '—',
     user.deleted_by || 'Not recorded',
-    user.deletion_reason || '—',
   ]);
 }
 
@@ -108,14 +106,13 @@ export async function downloadDeletedUsersPdf(users: DeletedUser[], now: Date = 
       styles: { fontSize: 7, overflow: 'linebreak', cellPadding: 1.5 },
       headStyles: { fillColor: [0, 0, 0] },
       columnStyles: {
-        0: { cellWidth: 20 },
-        1: { cellWidth: 34 },
-        2: { cellWidth: 14 },
-        3: { cellWidth: 20 },
-        4: { cellWidth: 20 },
-        5: { cellWidth: 20 },
-        6: { cellWidth: 26 },
-        7: { cellWidth: 32 },
+        0: { cellWidth: 26 },
+        1: { cellWidth: 42 },
+        2: { cellWidth: 16 },
+        3: { cellWidth: 24 },
+        4: { cellWidth: 24 },
+        5: { cellWidth: 24 },
+        6: { cellWidth: 30 },
       },
     });
 
