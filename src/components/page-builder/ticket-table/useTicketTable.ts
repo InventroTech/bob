@@ -89,8 +89,11 @@ const [filterOptions, setFilterOptions] = useState<{
 });
 const { session, user } = useAuth();
 const { customRole, membershipLoaded } = useTenant();
-// CSE users only see tickets after applying at least one filter (search alone doesn't count).
-const requireFiltersToShow = customRole?.toUpperCase() === 'CSE';
+// Only the All Support Tickets page lists every ticket; WIP / Not Connected pages use their own endpoints.
+const isAllTicketsList = (config?.apiEndpoint ?? '').replace(/\/+$/, '').endsWith('/analytics/support-ticket');
+// On that page, CSE users only see tickets after applying at least one filter (search alone doesn't count).
+const requireFiltersToShow = isAllTicketsList && customRole?.toUpperCase() === 'CSE';
+const roleReadyForList = !isAllTicketsList || membershipLoaded;
 const hasSelectedFilters =
   resolutionStatusFilter.length > 0 ||
   assignedToFilter !== 'all' ||
@@ -1142,7 +1145,7 @@ const handleTicketUpdate = (updatedTicket: any) => {
 
 useEffect(() => {
   // Wait for the role, or a CSE would briefly see the unfiltered list.
-  if (!membershipLoaded) return;
+  if (!roleReadyForList) return;
   if (requireFiltersToShow) {
     setLoading(false);
     if (filtersApplied) {
@@ -1295,7 +1298,7 @@ useEffect(() => {
   return () => {
     abortController.abort();
   };
-}, [session?.access_token, config?.apiEndpoint, apiPrefix, membershipLoaded, requireFiltersToShow]);
+}, [session?.access_token, config?.apiEndpoint, apiPrefix, roleReadyForList, requireFiltersToShow]);
 
 // Fetch filter options and assignees when component mounts
 useEffect(() => {
