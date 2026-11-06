@@ -13,6 +13,7 @@ import type { Column, TicketTableProps } from './types';
 import {
   TICKET_API_BASE,
   defaultColumns,
+  requiresFiltersBeforeShowing,
   transformTicketForCarousel,
   getDisplayName,
 } from './utils';
@@ -89,13 +90,9 @@ const [filterOptions, setFilterOptions] = useState<{
 });
 const { session, user } = useAuth();
 const { customRole, membershipLoaded } = useTenant();
-// Page Builder setting: list stays empty until a filter is applied, for the chosen roles (none = everyone).
-const filtersRequiredOnTable = config?.requireFiltersBeforeShowing === true;
-const filtersRequiredRoles = (config?.requireFiltersRoles ?? []).map((key) => key.toUpperCase());
-const requireFiltersToShow =
-  filtersRequiredOnTable &&
-  (filtersRequiredRoles.length === 0 || filtersRequiredRoles.includes(customRole?.toUpperCase() ?? ''));
-const roleReadyForList = !filtersRequiredOnTable || membershipLoaded;
+const requireFiltersToShow = requiresFiltersBeforeShowing(config, customRole);
+// Wait for the role only when the setting is on, so other tables load straight away.
+const roleReadyForList = config?.requireFiltersBeforeShowing !== true || membershipLoaded;
 const hasSelectedFilters =
   resolutionStatusFilter.length > 0 ||
   assignedToFilter !== 'all' ||
