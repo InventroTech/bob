@@ -74,7 +74,6 @@ describe('deletedUsersPdfRows', () => {
     expect(row[4]).toBe(formatLogDate('2026-01-05T04:30:00Z'));
     expect(row[5]).toBe(formatLogDate('2026-11-04T10:00:00Z'));
     expect(row[6]).toBe('admin@praja.in');
-    expect(row[7]).toBe('Left the company');
   });
 
   it('shows the manager email when the manager has no name', () => {
@@ -97,14 +96,27 @@ describe('deletedUsersPdfRows', () => {
       }),
     ]);
 
-    expect(row).toEqual(['—', 'asha@praja.in', '—', '—', '—', '—', 'Not recorded', '—']);
+    expect(row).toEqual(['—', 'asha@praja.in', '—', '—', '—', '—', 'Not recorded']);
   });
 
-  it('keeps long reasons and new lines as they are', () => {
-    const reason = 'Moved to another team.\nWill rejoin next quarter, maybe.';
-    const [row] = deletedUsersPdfRows([user({ deletion_reason: reason })]);
+  it('has no Reason column', () => {
+    expect(DELETED_USERS_PDF_HEADERS).not.toContain('Reason');
+    expect(DELETED_USERS_PDF_HEADERS).toEqual([
+      'Name',
+      'Email',
+      'Role',
+      'Manager',
+      'Account created',
+      'Deleted at',
+      'Deleted by',
+    ]);
+  });
 
-    expect(row[7]).toBe(reason);
+  it('never puts the deletion reason in the PDF', () => {
+    const [row] = deletedUsersPdfRows([user({ deletion_reason: 'Left the company' })]);
+
+    expect(row).not.toContain('Left the company');
+    expect(row).toHaveLength(7);
   });
 });
 
@@ -145,6 +157,15 @@ describe('downloadDeletedUsersPdf', () => {
     const options = autoTable.mock.calls[0][1];
     expect(options.head).toEqual([[...DELETED_USERS_PDF_HEADERS]]);
     expect(options.body).toEqual(deletedUsersPdfRows(users));
+  });
+
+  it('sizes one column per header and fills the page width between the margins', async () => {
+    await downloadDeletedUsersPdf([user()], NOW);
+
+    const options = autoTable.mock.calls[0][1];
+    const widths = Object.values(options.columnStyles as Record<string, { cellWidth: number }>).map((c) => c.cellWidth);
+    expect(widths).toHaveLength(DELETED_USERS_PDF_HEADERS.length);
+    expect(widths.reduce((sum, w) => sum + w, 0)).toBe(210 - options.margin.left - options.margin.right);
   });
 
   it('downloads the file with the letterhead and says it worked', async () => {
