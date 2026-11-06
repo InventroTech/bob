@@ -1,14 +1,17 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
 
 import type { User } from './types';
 import { useDeleteUserFlow } from './useDeleteUserFlow';
 
 const deleteUserWithLog = vi.fn();
 
-vi.mock('./deleteUserWithLog', () => ({
+vi.mock('./deleteUserWithLog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./deleteUserWithLog')>()),
   deleteUserWithLog: (...args: unknown[]) => deleteUserWithLog(...args),
 }));
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 const user = (overrides: Partial<User> = {}): User => ({
   uid: 'uid-asha',
@@ -39,107 +42,99 @@ const setup = (users: User[] = [asha, ravi]) => {
 
 beforeEach(() => {
   deleteUserWithLog.mockReset().mockResolvedValue(true);
+  vi.mocked(toast.error).mockReset();
 });
 
 describe('useDeleteUserFlow', () => {
-  it('starts with nobody waiting to be deleted', () => {
+  it('starts with nobody being deleted', () => {
     const { result } = setup();
 
-    expect(result.current.pendingDelete).toBeNull();
-    expect(result.current.deletedRefreshKey).toBe(0);
+    expect(result.current.deletingEmail).toBeNull();
   });
 
-  it('remembers the user whose delete button was pressed', () => {
-    const { result } = setup();
-
-    act(() => result.current.requestDelete(ravi));
-
-    expect(result.current.pendingDelete).toEqual({ email: 'ravi@praja.in', uid: 'uid-ravi', name: 'Ravi K' });
-  });
-
-  it('forgets the user when the dialog is cancelled', () => {
-    const { result } = setup();
-    act(() => result.current.requestDelete(asha));
-
-    act(() => result.current.cancelDelete());
-
-    expect(result.current.pendingDelete).toBeNull();
-    expect(deleteUserWithLog).not.toHaveBeenCalled();
-  });
-
-  it("deletes with the user's role from the list, the reason and the page context", async () => {
+  it('deletes straight away, without asking for confirmation or a reason', async () => {
     const { result, navigate, refresh } = setup();
-    act(() => result.current.requestDelete(ravi));
 
-    await act(() => result.current.confirmDelete('Left the company'));
+    await act(() => result.current.deleteUser(ravi));
 
+    expect(deleteUserWithLog).toHaveBeenCalledTimes(1);
     expect(deleteUserWithLog).toHaveBeenCalledWith({
       email: 'ravi@praja.in',
       roleId: 'role-gm',
-      reason: 'Left the company',
       currentUserEmail: 'admin@praja.in',
       tenantSlug: 'praja',
       navigate,
       refresh,
     });
+    expect(deleteUserWithLog.mock.calls[0][0]).not.toHaveProperty('reason');
   });
 
-  it('deletes without a reason', async () => {
-    const { result } = setup();
-    act(() => result.current.requestDelete(asha));
+  it('looks up the role from the users list when the row has none', async () => {
+    const { result } = setup([asha, ravi]);
 
-    await act(() => result.current.confirmDelete(undefined));
+    await act(() => result.current.deleteUser(user({ email: 'ravi@praja.in', role_id: '' })));
 
-    expect(deleteUserWithLog).toHaveBeenCalledWith(expect.objectContaining({ email: 'asha@praja.in', reason: undefined }));
+    expect(deleteUserWithLog.mock.calls[0][0].roleId).toBe('role-gm');
   });
 
-  it('closes the dialog and reloads the deleted list after a successful delete', async () => {
-    const { result } = setup();
-    act(() => result.current.requestDelete(asha));
-
-    await act(() => result.current.confirmDelete('Left'));
-
-    expect(result.current.pendingDelete).toBeNull();
-    expect(result.current.deletedRefreshKey).toBe(1);
-  });
-
-  it('bumps the refresh key once per successful delete', async () => {
+  it('marks the user as being deleted until the delete finishes', async () => {
+    let finish: (ok: boolean) => void = () => {};
+    deleteUserWithLog.mockReturnValue(new Promise<boolean>((resolve) => { finish = resolve; }));
     const { result } = setup();
 
-    for (const person of [asha, ravi]) {
-      act(() => result.current.requestDelete(person));
-      await act(() => result.current.confirmDelete(undefined));
-    }
+    let pending: Promise<void> = Promise.resolve();
+    act(() => { pending = result.current.deleteUser(asha); });
+    await waitFor(() => expect(result.current.deletingEmail).toBe('asha@praja.in'));
 
-    expect(result.current.deletedRefreshKey).toBe(2);
+    await act(async () => { finish(true); await pending; });
+    expect(result.current.deletingEmail).toBeNull();
   });
 
-  it('keeps the dialog open and the list as it was when the delete fails', async () => {
+  it('ignores a second click while a delete is still running', async () => {
+    let finish: (ok: boolean) => void = () => {};
+    deleteUserWithLog.mockReturnValue(new Promise<boolean>((resolve) => { finish = resolve; }));
+    const { result } = setup();
+
+    let first: Promise<void> = Promise.resolve();
+    act(() => { first = result.current.deleteUser(asha); });
+    await act(() => result.current.deleteUser(ravi));
+    await act(() => result.current.deleteUser(asha));
+
+    expect(deleteUserWithLog).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(true); await first; });
+  });
+
+  it('can delete another user once the first delete is done', async () => {
+    const { result } = setup();
+
+    await act(() => result.current.deleteUser(asha));
+    await act(() => result.current.deleteUser(ravi));
+
+    expect(deleteUserWithLog).toHaveBeenCalledTimes(2);
+    expect(deleteUserWithLog.mock.calls[1][0].email).toBe('ravi@praja.in');
+  });
+
+  it('clears the deleting state when the delete fails', async () => {
     deleteUserWithLog.mockResolvedValue(false);
     const { result } = setup();
-    act(() => result.current.requestDelete(asha));
 
-    await act(() => result.current.confirmDelete('Left'));
+    await act(() => result.current.deleteUser(asha));
 
-    expect(result.current.pendingDelete).toEqual({ email: 'asha@praja.in', uid: 'uid-asha', name: 'Asha Rao' });
-    expect(result.current.deletedRefreshKey).toBe(0);
+    expect(result.current.deletingEmail).toBeNull();
   });
 
-  it('does nothing when confirm is pressed with nobody selected', async () => {
+  it('shows an error and clears the deleting state if something throws', async () => {
+    deleteUserWithLog.mockRejectedValue(new Error('network'));
     const { result } = setup();
 
-    await act(() => result.current.confirmDelete('Left'));
+    await act(() => result.current.deleteUser(asha));
 
-    expect(deleteUserWithLog).not.toHaveBeenCalled();
-    expect(result.current.deletedRefreshKey).toBe(0);
-  });
-
-  it('sends no role when the user is no longer in the list', async () => {
-    const { result } = setup([ravi]);
-    act(() => result.current.requestDelete(asha));
-
-    await act(() => result.current.confirmDelete(undefined));
-
-    expect(deleteUserWithLog).toHaveBeenCalledWith(expect.objectContaining({ email: 'asha@praja.in', roleId: undefined }));
+    expect(toast.error).toHaveBeenCalledWith('network');
+    expect(result.current.deletingEmail).toBeNull();
+    await act(() => {
+      deleteUserWithLog.mockResolvedValue(true);
+      return result.current.deleteUser(ravi);
+    });
+    expect(deleteUserWithLog).toHaveBeenCalledTimes(2);
   });
 });
