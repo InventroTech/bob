@@ -28,20 +28,14 @@ import {
   achtThresholds,
   computeAchtOverall,
   computeAdherenceByRm,
-  computeLeaderboardByRm,
-  computePerformanceByRmFromSummary,
+  computePerformanceByRm,
   computeShiftTimeAverages,
-  computeSquadSummaries,
   computeTeamTotals,
-  computeTeamTotalsFromSummary,
   formatVsTarget,
   type RmAdherenceRow,
-  type RmLeaderboardRow,
   type RmPerformanceRow,
-  type RmSquadSummary,
 } from './rm-prd-analytics/aggregate';
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
-import { useRmPerformanceSummary } from './rm-prd-analytics/useRmPerformanceSummary';
 import { useRmActiveSessions } from './rm-prd-analytics/useRmActiveSessions';
 import { useRmDailyTargets } from './rm-prd-analytics/useRmDailyTargets';
 import {
@@ -56,7 +50,6 @@ import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useSpoofUserId } from '@/lib/auth/spoof';
-import { clearRmActivityCache } from '@/lib/api/services/rmActivity';
 import { RefreshCw } from 'lucide-react';
 import { useTableSort, SortableHeader } from './rm-prd-analytics/tableSort';
 
@@ -121,7 +114,7 @@ export const shouldShowFilter = (
   return isFilterVisible(config, key);
 };
 
-type Tab = 'performance' | 'adherence' | 'leaderboard';
+type Tab = 'performance' | 'adherence';
 
 const DEFAULT_FILTERS = {
   manager: 'All managers',
@@ -169,8 +162,7 @@ function loadStoredFilters(): Filters {
 
 function loadStoredTab(): Tab {
   if (typeof window === 'undefined') return 'performance';
-  const stored = window.localStorage.getItem(tabStorageKey());
-  return stored === 'adherence' || stored === 'leaderboard' ? stored : 'performance';
+  return window.localStorage.getItem(tabStorageKey()) === 'adherence' ? 'adherence' : 'performance';
 }
 
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
@@ -251,31 +243,6 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // targets are already summed server-side across dateBounds (day-by-day
   // overrides where a manager set one, else the RM's standing DAILY_TARGET)
   const { targets: dailyTargets } = useRmDailyTargets(dateBounds, refreshTick);
-  // Performance/Leaderboard/Squad numbers come from a separate, FAST,
-  // server-pre-aggregated endpoint (see useRmPerformanceSummary) rather
-  // than the raw multi-day event download above — only fetched when a tab
-  // that actually needs it is open, so switching to/landing on Performance
-  // renders as soon as this one small request resolves, without waiting on
-  // the (potentially much slower, on a busy tenant) raw events fetch that
-  // only Adherence and the touch-report drill-down still genuinely need.
-  const performanceDateBounds = tab === 'performance' || tab === 'leaderboard' ? dateBounds : null;
-  const {
-    byRm: performanceSummaryByRm,
-    team: performanceSummaryTeam,
-    loading: performanceSummaryLoading,
-    error: performanceSummaryError,
-  } = useRmPerformanceSummary(
-    performanceDateBounds,
-    isRmView ? activeUserId ?? undefined : undefined,
-    refreshTick,
-    isAsmView ? activeUserId ?? undefined : undefined,
-    {
-      managerName: filters.manager !== 'All managers' ? filters.manager : undefined,
-      leadGroup: filters.leadGroup !== 'All groups' ? filters.leadGroup : undefined,
-      state: filters.state !== 'All states' ? filters.state : undefined,
-      party: filters.party !== 'All parties' ? filters.party : undefined,
-    }
-  );
   // "on lead right now" — a live, present-moment fact that rm_activity_events
   // can't answer on its own (see useRmActiveSessions), so it's a separate
   // fetch on the same refreshTick cadence as everything else above, not a
@@ -305,50 +272,20 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     return result;
   }, [events, dateBounds, filters.manager, filters.leadGroup, filters.state, filters.party]);
 
-  // Performance/Leaderboard share ONE performanceByRm, built from the fast
-  // summary endpoint — Leaderboard used to silently redo this exact
-  // computation a second (and Squad a third) time over the same raw events;
-  // now both just reuse this array directly (see computeLeaderboardByRm/
-  // computeSquadSummaries below). Adherence's own aggregate is still a full
-  // O(n) pass over visibleEvents (it needs real per-touch timestamps for
-  // merged handling-time/login-span math the summary endpoint doesn't
-  // compute), so it stays gated to its own tab to avoid that cost elsewhere.
   const performanceByRm = useMemo(
-    () =>
-      tab === 'performance' || tab === 'leaderboard'
-        ? computePerformanceByRmFromSummary(performanceSummaryByRm, dailyTargets)
-        : [],
-    [tab, performanceSummaryByRm, dailyTargets]
+    () => computePerformanceByRm(visibleEvents, dailyTargets),
+    [visibleEvents, dailyTargets]
   );
-  const adherenceByRm = useMemo(
-    () => (tab === 'adherence' ? computeAdherenceByRm(visibleEvents) : []),
-    [tab, visibleEvents]
-  );
-  // Performance's own team-total cards now come from the same summary
-  // endpoint as performanceByRm above (team is NOT a sum of the by-RM rows —
-  // see computeTeamTotalsFromSummary's docstring). Adherence's RM-view
-  // outcome cards still need the events-based version since Adherence
-  // doesn't fetch the summary at all.
-  const teamTotals = useMemo(() => {
-    if (tab === 'performance') {
-      return computeTeamTotalsFromSummary(
-        performanceSummaryTeam,
-        performanceSummaryByRm.map((r) => r.rmUserId),
-        dailyTargets
-      );
-    }
-    if (tab === 'adherence') return computeTeamTotals(visibleEvents, dailyTargets);
-    return computeTeamTotals([], {});
-  }, [tab, performanceSummaryTeam, performanceSummaryByRm, visibleEvents, dailyTargets]
+  const adherenceByRm = useMemo(() => computeAdherenceByRm(visibleEvents), [visibleEvents]);
+  const teamTotals = useMemo(
+    () => computeTeamTotals(visibleEvents, dailyTargets),
+    [visibleEvents, dailyTargets]
   );
   const shiftTimeAverages = useMemo(
-    () => (tab === 'adherence' ? computeShiftTimeAverages(visibleEvents, filters.dateRange) : computeShiftTimeAverages([], filters.dateRange)),
-    [tab, visibleEvents, filters.dateRange]
+    () => computeShiftTimeAverages(visibleEvents, filters.dateRange),
+    [visibleEvents, filters.dateRange]
   );
-  const achtOverall = useMemo(
-    () => (tab === 'adherence' ? computeAchtOverall(visibleEvents) : computeAchtOverall([])),
-    [tab, visibleEvents]
-  );
+  const achtOverall = useMemo(() => computeAchtOverall(visibleEvents), [visibleEvents]);
 
   // "By RM" table search — exact-substring match on the RM's name, doesn't
   // touch any of the team-total cards above the table
@@ -360,18 +297,6 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   const filteredAdherenceByRm = useMemo(
     () => (rmSearchTerm ? adherenceByRm.filter((row) => row.name.toLowerCase().includes(rmSearchTerm)) : adherenceByRm),
     [adherenceByRm, rmSearchTerm]
-  );
-  const leaderboardByRm = useMemo(
-    () => (tab === 'leaderboard' ? computeLeaderboardByRm(performanceByRm) : []),
-    [tab, performanceByRm]
-  );
-  const squadSummaries = useMemo(
-    () => (tab === 'leaderboard' ? computeSquadSummaries(performanceByRm) : []),
-    [tab, performanceByRm]
-  );
-  const filteredLeaderboardByRm = useMemo(
-    () => (rmSearchTerm ? leaderboardByRm.filter((row) => row.name.toLowerCase().includes(rmSearchTerm)) : leaderboardByRm),
-    [leaderboardByRm, rmSearchTerm]
   );
 
   const setFilter = (key: keyof Filters, value: string) => {
@@ -409,15 +334,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     [visibleEvents, drillRmUserId]
   );
 
-  // Performance/Leaderboard render from the fast summary endpoint, not the
-  // (potentially much slower, on a busy tenant) raw multi-day events fetch
-  // — gating the page's own loading/error state on whichever source the
-  // active tab actually reads from means landing on/switching to
-  // Performance no longer waits on Adherence's heavier fetch to finish.
-  const activeLoading = tab === 'adherence' ? loading : performanceSummaryLoading;
-  const activeError = tab === 'adherence' ? error : performanceSummaryError;
-
-  if (activeLoading) {
+  if (loading) {
     return (
       <div className="flex min-h-[240px] items-center justify-center bg-stone-50 text-sm text-stone-400">
         Loading RM activity…
@@ -425,10 +342,10 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     );
   }
 
-  if (activeError) {
+  if (error) {
     return (
       <div className="m-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-        Couldn't load RM activity data: {activeError}
+        Couldn't load RM activity data: {error}
       </div>
     );
   }
@@ -444,13 +361,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         <Button
           variant="outline"
           size="sm"
-          onClick={() => {
-            // a manual click means "I want this fresh right now" — must
-            // bypass the request cache (see rmActivityApi), not just wait
-            // out its TTL like the passive tab-visibility refresh does
-            clearRmActivityCache();
-            setRefreshTick((t) => t + 1);
-          }}
+          onClick={() => setRefreshTick((t) => t + 1)}
           className="gap-1.5"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -474,23 +385,10 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         <TabButton active={tab === 'performance'} onClick={() => setTab('performance')}>
           Performance
         </TabButton>
-        <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')}>
-          Leaderboard
-        </TabButton>
       </div>
 
       <div className="mt-6">
-        {tab === 'leaderboard' ? (
-          <LeaderboardView
-            squadSummaries={squadSummaries}
-            leaderboardByRm={filteredLeaderboardByRm}
-            rmSearch={rmSearch}
-            onRmSearchChange={setRmSearch}
-            onSelectRm={setSelectedRmUserId}
-            stateNameById={stateNameById}
-            activeRmUserIds={activeRmUserIds}
-          />
-        ) : tab === 'performance' ? (
+        {tab === 'performance' ? (
           <PerformanceView
             onDrill={openTeamDrill}
             teamTotals={teamTotals}
@@ -747,221 +645,6 @@ const vsTargetColor = (achieved: number, target: number) => {
 // disposition-time thresholds: stays its normal color under the SLA, turns red once breached
 const timeColor = (seconds: number, threshold: number, underColor: string) =>
   seconds > threshold ? 'text-red-600' : underColor;
-
-// ---- Leaderboard tab ----
-
-// same thresholds as vsTargetColor, as a track-fill class instead of a text color
-const goalBarColor = (achieved: number, target: number) => {
-  const pct = target === 0 ? 0 : achieved / target;
-  if (pct >= 1) return 'bg-emerald-600';
-  if (pct >= 0.7) return 'bg-amber-600';
-  return 'bg-red-600';
-};
-
-// first letter of up to the first two words — "Manjula Devaraj" -> "MD",
-// a single-word name -> its first two letters
-function initialsFor(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-// Progress bar with a tick mark at the target position. Unlike Track (which
-// clips at 100%), this gives headroom past the goal so an RM/squad that blew
-// past target still shows a visibly longer bar instead of looking maxed out
-// identically to one that just barely cleared it — the tick alone marks
-// exactly where "goal" sits on the track.
-const GoalTrack: React.FC<{ achieved: number; target: number; className?: string }> = ({
-  achieved,
-  target,
-  className,
-}) => {
-  const trackMax = Math.max(achieved, target, 1) * 1.15;
-  const fillPct = Math.min((achieved / trackMax) * 100, 100);
-  const tickPct = target ? Math.min((target / trackMax) * 100, 100) : 0;
-  return (
-    <div className="relative h-1.5 w-full rounded-full bg-stone-200">
-      <div className={cn('h-1.5 rounded-full', className)} style={{ width: `${fillPct}%` }} />
-      {target > 0 && (
-        <div
-          className="absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full bg-stone-900"
-          style={{ left: `${tickPct}%` }}
-        />
-      )}
-    </div>
-  );
-};
-
-const SquadSummaryCard: React.FC<{ squad: RmSquadSummary; stateNameById: Record<string, string> }> = ({
-  squad,
-  stateNameById,
-}) => (
-  <CardShell className={squad.rank === 1 ? 'border-amber-300 bg-amber-50/40' : undefined}>
-    <div className="flex items-center gap-1.5 text-sm font-medium text-stone-600">
-      {squad.rank === 1 && <span>🏆</span>}
-      <span className="truncate">{squad.squad}</span>
-      <span className="text-stone-300">·</span>
-      <span className="shrink-0">{stateNameById[squad.state] || squad.state || '—'}</span>
-    </div>
-    <div className={cn('mt-1 font-mono text-3xl font-semibold', vsTargetColor(squad.achieved, squad.target))}>
-      {formatVsTarget(squad.achieved, squad.target)}
-    </div>
-    <div className="mt-3">
-      <GoalTrack achieved={squad.achieved} target={squad.target} className={goalBarColor(squad.achieved, squad.target)} />
-    </div>
-    <div className="mt-2 text-xs text-stone-400">
-      {squad.achieved} / {squad.target} · {squad.rmCount} RM{squad.rmCount === 1 ? '' : 's'}
-    </div>
-  </CardShell>
-);
-
-const LeaderboardRow: React.FC<{
-  row: RmLeaderboardRow;
-  onSelectRm: (rmUserId: string) => void;
-  isOnLead: boolean;
-}> = ({ row, onSelectRm, isOnLead }) => {
-  const emoji = row.rank === 1 ? '🏆' : row.clearedGoal ? '🎉' : null;
-  return (
-    <div
-      className="flex cursor-pointer items-center gap-4 border-b border-stone-100 px-4 py-4 last:border-none hover:bg-stone-50"
-      onClick={() => onSelectRm(row.rmUserId)}
-    >
-      <div className="flex w-10 shrink-0 items-center gap-1 font-mono text-sm text-stone-400">
-        <span>{row.rank}</span>
-        {emoji && <span>{emoji}</span>}
-      </div>
-      <div
-        className={cn(
-          'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
-          row.rank === 1 ? 'bg-amber-200 text-amber-900' : 'bg-stone-200 text-stone-700'
-        )}
-      >
-        {initialsFor(row.name)}
-      </div>
-      <div className="min-w-[160px] flex-1">
-        <div className="flex items-center gap-1.5 font-semibold text-stone-900">
-          {row.name}
-          {isOnLead && <OnLeadDot />}
-        </div>
-        <div className="truncate text-xs text-stone-400">
-          {row.squad} · {row.state || '—'}
-        </div>
-      </div>
-      <div className="hidden flex-[2] sm:block">
-        <GoalTrack achieved={row.achieved} target={row.target} className={goalBarColor(row.achieved, row.target)} />
-      </div>
-      <div className="w-16 shrink-0 text-right font-mono text-sm text-stone-600">
-        {row.achieved} / {row.target}
-      </div>
-      <div
-        className={cn(
-          'w-20 shrink-0 text-right font-mono text-sm font-semibold',
-          vsTargetColor(row.achieved, row.target)
-        )}
-      >
-        {formatVsTarget(row.achieved, row.target)}
-      </div>
-    </div>
-  );
-};
-
-const LEADERBOARD_CSV_COLUMNS: Array<{ header: string; value: (row: RmLeaderboardRow) => string | number }> = [
-  { header: 'Rank', value: (r) => r.rank },
-  { header: 'Name', value: (r) => r.name },
-  { header: 'Squad', value: (r) => r.squad },
-  { header: 'State', value: (r) => r.state },
-  { header: 'Achieved', value: (r) => r.achieved },
-  { header: 'Target', value: (r) => r.target },
-  { header: 'Vs Target', value: (r) => (r.target ? `${((r.achieved / r.target) * 100).toFixed(1)}%` : '') },
-];
-
-const csvCell = (value: string | number): string => {
-  const s = String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-
-function downloadLeaderboardCsv(rows: RmLeaderboardRow[]) {
-  const lines = [
-    LEADERBOARD_CSV_COLUMNS.map((col) => csvCell(col.header)).join(','),
-    ...rows.map((row) => LEADERBOARD_CSV_COLUMNS.map((col) => csvCell(col.value(row))).join(',')),
-  ];
-  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `leaderboard-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-const LeaderboardView: React.FC<{
-  squadSummaries: RmSquadSummary[];
-  leaderboardByRm: RmLeaderboardRow[];
-  rmSearch: string;
-  onRmSearchChange: (value: string) => void;
-  onSelectRm: (rmUserId: string) => void;
-  stateNameById: Record<string, string>;
-  activeRmUserIds: Set<string>;
-}> = ({ squadSummaries, leaderboardByRm, rmSearch, onRmSearchChange, onSelectRm, stateNameById, activeRmUserIds }) => {
-  const squadCount = squadSummaries.length;
-  const rmCount = leaderboardByRm.length;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-600">
-            {squadCount} squad{squadCount === 1 ? '' : 's'} · {rmCount} RM{rmCount === 1 ? '' : 's'}
-          </span>
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            LIVE
-          </span>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => downloadLeaderboardCsv(leaderboardByRm)}
-          disabled={leaderboardByRm.length === 0}
-        >
-          Download CSV
-        </Button>
-      </div>
-
-      {squadCount > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {squadSummaries.map((squad) => (
-            <SquadSummaryCard key={squad.squad} squad={squad} stateNameById={stateNameById} />
-          ))}
-        </div>
-      )}
-
-      <section>
-        <RmTableHeader label="Leaderboard · ranked by % of goal" search={rmSearch} onSearchChange={onRmSearchChange} />
-        <div className="rounded-xl border border-stone-200 bg-white">
-          {leaderboardByRm.length === 0 ? (
-            <div className="p-8 text-center text-sm text-stone-400">No RMs to rank yet.</div>
-          ) : (
-            leaderboardByRm.map((row) => (
-              <LeaderboardRow
-                key={row.rmUserId}
-                row={row}
-                onSelectRm={onSelectRm}
-                isOnLead={activeRmUserIds.has(row.rmUserId)}
-              />
-            ))
-          )}
-        </div>
-      </section>
-    </div>
-  );
-};
 
 // ---- Performance tab ----
 
