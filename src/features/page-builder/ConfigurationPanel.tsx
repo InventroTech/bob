@@ -30,6 +30,7 @@ import {
   CallAttemptMatrixConfig,
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
+import { TicketTableAccessConfig } from "@/components/page-builder/component-config/TicketTableAccessConfig";
 import { LeadProgressBarConfig } from "@/components/page-builder/component-config/LeadProgressBarConfig";
 import { CseProgressBarConfig } from "@/components/page-builder/component-config/CseProgressBarConfig";
 import { WhatsAppTemplateConfig } from "@/components/page-builder/component-config/WhatsAppTemplateConfig";
@@ -240,6 +241,10 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     viewMode?: 'manager' | 'asm' | 'rm';
     /** RM PRD Analytics: Role.key values that count as "manager" for the Manager filter. */
     managerRoles?: string[];
+    /** Ticket table: list stays empty until at least one filter is applied. */
+    requireFiltersBeforeShowing?: boolean;
+    /** Ticket table: Role.key values the rule above applies to (empty = everyone). */
+    requireFiltersRoles?: string[];
   };
 
   // Local state for all input fields
@@ -325,6 +330,8 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     visibleFilters: (initialConfig as any).visibleFilters ?? undefined,
     viewMode: (initialConfig as any).viewMode ?? 'manager',
     managerRoles: (initialConfig as any).managerRoles ?? undefined,
+    requireFiltersBeforeShowing: (initialConfig as any).requireFiltersBeforeShowing ?? false,
+    requireFiltersRoles: (initialConfig as any).requireFiltersRoles ?? undefined,
   });
 
   // Separate state for columns
@@ -621,25 +628,28 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
 
       case 'ticketTable':
         return (
-          <TableConfig
-            localConfig={localConfig as any}
-            localColumns={localColumns}
-            numColumns={numColumns}
-            localFilters={localFilters}
-            numFilters={numFilters}
-            handleInputChange={handleInputChange}
-            handleColumnCountChange={handleColumnCountChange}
-            handleColumnFieldChange={handleColumnFieldChange}
-            handleColumnDelete={handleColumnDelete}
-            handleFilterCountChange={handleFilterCountChange}
-            handleFilterDelete={handleFilterDelete}
-            handleFilterFieldChange={handleFilterFieldChange}
-            handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
-            handleAddFilterOption={handleAddFilterOption}
-            handleRemoveFilterOption={handleRemoveFilterOption}
-            handleFilterOptionChange={handleFilterOptionChange}
-            onReplaceFilters={handleReplaceFilters}
-          />
+          <>
+            <TableConfig
+              localConfig={localConfig as any}
+              localColumns={localColumns}
+              numColumns={numColumns}
+              localFilters={localFilters}
+              numFilters={numFilters}
+              handleInputChange={handleInputChange}
+              handleColumnCountChange={handleColumnCountChange}
+              handleColumnFieldChange={handleColumnFieldChange}
+              handleColumnDelete={handleColumnDelete}
+              handleFilterCountChange={handleFilterCountChange}
+              handleFilterDelete={handleFilterDelete}
+              handleFilterFieldChange={handleFilterFieldChange}
+              handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
+              handleAddFilterOption={handleAddFilterOption}
+              handleRemoveFilterOption={handleRemoveFilterOption}
+              handleFilterOptionChange={handleFilterOptionChange}
+              onReplaceFilters={handleReplaceFilters}
+            />
+            <TicketTableAccessConfig localConfig={localConfig} handleInputChange={handleInputChange} />
+          </>
         );
 
       case 'leadTable':
