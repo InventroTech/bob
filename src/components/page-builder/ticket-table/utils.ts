@@ -4,6 +4,20 @@ import type { Column } from './types';
 
 export const TICKET_API_BASE = import.meta.env.VITE_RENDER_API_URL;
 
+/**
+ * Page Builder "Ticket Visibility" setting: whether this table stays empty for the signed-in user
+ * until at least one filter is applied. No roles selected means it applies to everyone.
+ */
+export function requiresFiltersBeforeShowing(
+  config: { requireFiltersBeforeShowing?: boolean; requireFiltersRoles?: string[] } | undefined,
+  roleKey: string | null | undefined,
+): boolean {
+  if (config?.requireFiltersBeforeShowing !== true) return false;
+  const roles = (config.requireFiltersRoles ?? []).map((key) => key.toUpperCase());
+  if (roles.length === 0) return true;
+  return !!roleKey && roles.includes(roleKey.toUpperCase());
+}
+
 export function transformTicketForCarousel(row: any) {
   const nestedData =
     row?.data && typeof row.data === "object" && !Array.isArray(row.data) ? row.data : null;
