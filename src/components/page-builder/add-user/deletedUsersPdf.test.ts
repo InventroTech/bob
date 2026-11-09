@@ -1,3 +1,4 @@
+import { format } from 'date-fns';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 
@@ -121,6 +122,17 @@ describe('deletedUsersPdfRows', () => {
 });
 
 describe('formatLogDate', () => {
+  it('reads a timestamp without a timezone as UTC, like the backend sends it', () => {
+    expect(formatLogDate('2026-11-09T11:49:00')).toBe(format(new Date(Date.UTC(2026, 10, 9, 11, 49)), 'dd MMM yyyy, hh:mm a'));
+    expect(formatLogDate('2026-11-09T11:49:00.123456')).toBe(formatLogDate('2026-11-09T11:49:00Z'));
+    expect(formatLogDate('2026-11-09 11:49:00')).toBe(formatLogDate('2026-11-09T11:49:00Z'));
+  });
+
+  it('keeps timestamps that already carry a timezone', () => {
+    expect(formatLogDate('2026-11-09T17:19:00+05:30')).toBe(formatLogDate('2026-11-09T11:49:00Z'));
+    expect(formatLogDate('2026-11-09T11:49:00Z')).toBe(format(new Date(Date.UTC(2026, 10, 9, 11, 49)), 'dd MMM yyyy, hh:mm a'));
+  });
+
   it('formats a date with day, month, year and time', () => {
     expect(formatLogDate('2026-11-04T10:00:00')).toMatch(/^04 Nov 2026, \d{2}:\d{2} (AM|PM)$/);
   });
