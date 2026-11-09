@@ -22,9 +22,13 @@ export const DELETED_USERS_PDF_HEADERS = [
   'Deleted by',
 ] as const;
 
+/** The backend stores UTC without a zone (USE_TZ = False), so a bare timestamp is read as UTC, not local time. */
+const asUtc = (value: string) =>
+  /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value.trim().replace(' ', 'T')}Z`;
+
 export function formatLogDate(value: string | null | undefined): string {
   if (!value) return '';
-  const date = new Date(value);
+  const date = new Date(asUtc(value));
   return Number.isNaN(date.getTime()) ? '' : format(date, 'dd MMM yyyy, hh:mm a');
 }
 
