@@ -28,6 +28,10 @@ export interface TicketTableProps {
     apiPrefix?: 'supabase' | 'renderer';
     /** Comma-separated field names to search in (e.g. "name,email,subject"). Sent as search_fields with search param. */
     searchFields?: string;
+    /** List stays empty until at least one filter is applied (search alone doesn't count). */
+    requireFiltersBeforeShowing?: boolean;
+    /** Role.key values the rule above applies to; empty or missing applies it to everyone. */
+    requireFiltersRoles?: string[];
   };
 }
 

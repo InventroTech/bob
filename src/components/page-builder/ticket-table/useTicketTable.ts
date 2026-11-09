@@ -13,6 +13,7 @@ import type { Column, TicketTableProps } from './types';
 import {
   TICKET_API_BASE,
   defaultColumns,
+  requiresFiltersBeforeShowing,
   transformTicketForCarousel,
   getDisplayName,
 } from './utils';
@@ -89,8 +90,9 @@ const [filterOptions, setFilterOptions] = useState<{
 });
 const { session, user } = useAuth();
 const { customRole, membershipLoaded } = useTenant();
-// CSE users only see tickets after applying at least one filter (search alone doesn't count).
-const requireFiltersToShow = customRole?.toUpperCase() === 'CSE';
+const requireFiltersToShow = requiresFiltersBeforeShowing(config, customRole);
+// Wait for the role only when the setting is on, so other tables load straight away.
+const roleReadyForList = config?.requireFiltersBeforeShowing !== true || membershipLoaded;
 const hasSelectedFilters =
   resolutionStatusFilter.length > 0 ||
   assignedToFilter !== 'all' ||
@@ -1142,7 +1144,7 @@ const handleTicketUpdate = (updatedTicket: any) => {
 
 useEffect(() => {
   // Wait for the role, or a CSE would briefly see the unfiltered list.
-  if (!membershipLoaded) return;
+  if (!roleReadyForList) return;
   if (requireFiltersToShow) {
     setLoading(false);
     if (filtersApplied) {
@@ -1295,7 +1297,7 @@ useEffect(() => {
   return () => {
     abortController.abort();
   };
-}, [session?.access_token, config?.apiEndpoint, apiPrefix, membershipLoaded, requireFiltersToShow]);
+}, [session?.access_token, config?.apiEndpoint, apiPrefix, roleReadyForList, requireFiltersToShow]);
 
 // Fetch filter options and assignees when component mounts
 useEffect(() => {
