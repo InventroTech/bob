@@ -36,6 +36,7 @@ import {
   type RmPerformanceRow,
 } from './rm-prd-analytics/aggregate';
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
+import { clearRmActivityCache } from '@/lib/api/services/rmActivity';
 import { useRmActiveSessions } from './rm-prd-analytics/useRmActiveSessions';
 import { useRmDailyTargets } from './rm-prd-analytics/useRmDailyTargets';
 import {
@@ -198,6 +199,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        clearRmActivityCache();
         setRefreshTick((t) => t + 1);
       }
     };
@@ -361,7 +363,10 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setRefreshTick((t) => t + 1)}
+          onClick={() => {
+            clearRmActivityCache();
+            setRefreshTick((t) => t + 1);
+          }}
           className="gap-1.5"
         >
           <RefreshCw className="h-3.5 w-3.5" />
