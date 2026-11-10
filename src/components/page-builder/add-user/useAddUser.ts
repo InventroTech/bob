@@ -182,12 +182,18 @@ export function useAddUser({ config }: AddUserComponentProps) {
     try {
       const mapped: Record<string, UserCoreSettingsSummary> = {};
       const usersWithMembershipId = users.filter((u) => !!u.tenant_membership_id);
-      const rows = await Promise.all(
-        usersWithMembershipId.map(async (u) => ({
-          emailKey: (u.email || '').toLowerCase(),
-          kv: await leadTypeAssignmentApi.getUserCoreKVSettings(String(u.tenant_membership_id)),
-        }))
-      );
+      const kvByMembership = await leadTypeAssignmentApi.getAllUsersCoreKVSettings();
+      const rows = kvByMembership
+        ? usersWithMembershipId.map((u) => ({
+            emailKey: (u.email || '').toLowerCase(),
+            kv: kvByMembership[String(u.tenant_membership_id)] ?? [],
+          }))
+        : await Promise.all(
+            usersWithMembershipId.map(async (u) => ({
+              emailKey: (u.email || '').toLowerCase(),
+              kv: await leadTypeAssignmentApi.getUserCoreKVSettings(String(u.tenant_membership_id)),
+            }))
+          );
       rows.forEach(({ emailKey, kv }) => {
         const groupRow = kv.find((r) => r.key === 'GROUP');
         const targetRow = kv.find((r) => r.key === 'DAILY_TARGET');
