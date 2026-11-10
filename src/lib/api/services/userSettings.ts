@@ -327,6 +327,22 @@ export const leadTypeAssignmentApi = {
     }
   },
 
+  /**
+   * Core KV settings for every member of the tenant in one request, keyed by tenant membership id.
+   * Returns null when the backend doesn't have this endpoint yet (404), so callers can fall back
+   * to per-user requests during a staggered deploy.
+   */
+  async getAllUsersCoreKVSettings(): Promise<Record<string, UserCoreKVSetting[]> | null> {
+    try {
+      const response = await apiClient.get('/user-settings/core-kv-settings/');
+      const results = response.data?.results;
+      return results && typeof results === 'object' ? results : {};
+    } catch (error: any) {
+      if (error.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
   async patchSupportDailyLimits(
     userId: string,
     data: PatchSupportDailyLimitsPayload
