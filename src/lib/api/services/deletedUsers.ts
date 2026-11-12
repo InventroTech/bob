@@ -14,13 +14,11 @@ export interface DeletedUser {
   deleted_at: string | null;
   /** Null for users deleted before deletions were logged. */
   deleted_by: string | null;
-  deletion_reason: string | null;
 }
 
 export interface DeleteUserWithLogInput {
   email: string;
   roleId: string;
-  reason?: string;
 }
 
 export const deletedUsersService = {
@@ -29,11 +27,10 @@ export const deletedUsersService = {
     return Array.isArray(response.data?.results) ? response.data.results : [];
   },
 
-  /** Same delete as /accounts/delete-user/, plus a log row with who, when and the optional reason. */
-  async deleteWithLog({ email, roleId, reason }: DeleteUserWithLogInput): Promise<void> {
-    const trimmed = reason?.trim();
+  /** Same delete as /accounts/delete-user/, plus a log row with who and when. */
+  async deleteWithLog({ email, roleId }: DeleteUserWithLogInput): Promise<void> {
     await apiClient.delete('/accounts/delete-user-with-log/', {
-      data: { email, role_id: roleId, ...(trimmed ? { reason: trimmed } : {}) },
+      data: { email, role_id: roleId },
     });
   },
 };

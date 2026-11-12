@@ -28,26 +28,13 @@ describe('deletedUsersService.list', () => {
 });
 
 describe('deletedUsersService.deleteWithLog', () => {
-  it('calls the new endpoint with email, role and reason', async () => {
-    await deletedUsersService.deleteWithLog({ email: 'rm@praja.in', roleId: 'role-1', reason: 'Left' });
+  it('calls the new endpoint with only the email and role', async () => {
+    await deletedUsersService.deleteWithLog({ email: 'rm@praja.in', roleId: 'role-1' });
 
     expect(del).toHaveBeenCalledWith('/accounts/delete-user-with-log/', {
-      data: { email: 'rm@praja.in', role_id: 'role-1', reason: 'Left' },
+      data: { email: 'rm@praja.in', role_id: 'role-1' },
     });
-  });
-
-  it('trims the reason', async () => {
-    await deletedUsersService.deleteWithLog({ email: 'rm@praja.in', roleId: 'role-1', reason: '  Left  ' });
-
-    expect(del.mock.calls[0][1].data.reason).toBe('Left');
-  });
-
-  it('leaves the reason out when it is empty or spaces', async () => {
-    for (const reason of [undefined, '', '   ']) {
-      del.mockClear();
-      await deletedUsersService.deleteWithLog({ email: 'rm@praja.in', roleId: 'role-1', reason });
-      expect(del.mock.calls[0][1].data).toEqual({ email: 'rm@praja.in', role_id: 'role-1' });
-    }
+    expect(del.mock.calls[0][1].data).not.toHaveProperty('reason');
   });
 
   it('never calls the old delete endpoint', async () => {

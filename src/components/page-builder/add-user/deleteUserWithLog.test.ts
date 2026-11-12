@@ -21,7 +21,6 @@ const setup = (overrides: Partial<Parameters<typeof deleteUserWithLog>[0]> = {})
     deleteUserWithLog({
       email: 'rm@praja.in',
       roleId: 'role-1',
-      reason: 'Left the company',
       currentUserEmail: 'admin@praja.in',
       tenantSlug: 'praja',
       navigate,
@@ -39,12 +38,12 @@ beforeEach(() => {
 });
 
 describe('deleteUserWithLog', () => {
-  it('sends the email, role and reason to the log endpoint', async () => {
+  it('sends the email and role to the log endpoint', async () => {
     const { run } = setup();
 
     await run();
 
-    expect(deleteWithLog).toHaveBeenCalledWith({ email: 'rm@praja.in', roleId: 'role-1', reason: 'Left the company' });
+    expect(deleteWithLog).toHaveBeenCalledWith({ email: 'rm@praja.in', roleId: 'role-1' });
   });
 
   it('refreshes the user list and says it worked', async () => {
@@ -107,8 +106,8 @@ describe('deleteErrorMessage', () => {
 
   it('joins field errors from the server', () => {
     expect(
-      deleteErrorMessage({ data: { error: { reason: ['Ensure this field has no more than 500 characters.'] } } })
-    ).toBe('Ensure this field has no more than 500 characters.');
+      deleteErrorMessage({ data: { error: { email: ['Enter a valid email address.'] } } })
+    ).toBe('Enter a valid email address.');
   });
 
   it('falls back to the error message', () => {
