@@ -6,7 +6,6 @@ import { forceLogoutIfDeletedSelf } from '@/lib/auth/deletedUserSession';
 interface DeleteUserWithLogOptions {
   email: string;
   roleId: string | undefined;
-  reason?: string;
   currentUserEmail: string | undefined | null;
   tenantSlug: string | undefined;
   navigate: (path: string, options?: { replace?: boolean }) => void;
@@ -32,7 +31,6 @@ export function deleteErrorMessage(error: unknown): string {
 export async function deleteUserWithLog({
   email,
   roleId,
-  reason,
   currentUserEmail,
   tenantSlug,
   navigate,
@@ -43,7 +41,7 @@ export async function deleteUserWithLog({
     return false;
   }
   try {
-    await deletedUsersService.deleteWithLog({ email, roleId, reason });
+    await deletedUsersService.deleteWithLog({ email, roleId });
   } catch (error) {
     toast.error(deleteErrorMessage(error));
     return false;
