@@ -17,6 +17,12 @@ export const SUPPORT_DAILY_LIMIT_SELF_TRIAL_KEY = 'SUPPORT_DAILY_LIMIT_SELF_TRIA
 export const SUPPORT_DAILY_LIMIT_OTHER_KEY = 'SUPPORT_DAILY_LIMIT_OTHER';
 export const SUPPORT_RESOLVE_RATE_GOAL_KEY = 'SUPPORT_RESOLVE_RATE_GOAL';
 
+/** Users per core-settings request; must not exceed the backend's CORE_KV_SETTINGS_BATCH_LIMIT. */
+export const CORE_KV_SETTINGS_BATCH_SIZE = 60;
+const CORE_KV_SETTINGS_BATCH_WARNING_THRESHOLD = 10;
+
+export type CoreKvRow = Pick<UserCoreKVSetting, 'key' | 'value'>;
+
 
 /** Coerce core-KV numeric values (often JSON numbers, sometimes strings). */
 function coerceNonNegativeInt(value: unknown): number | null {
@@ -328,19 +334,44 @@ export const leadTypeAssignmentApi = {
   },
 
   /**
-   * Core KV settings for every member of the tenant in one request, keyed by tenant membership id.
-   * Returns null when the backend doesn't have this endpoint yet (404), so callers can fall back
-   * to per-user requests during a staggered deploy.
+   * Core KV settings for the given members, keyed by tenant membership id. Sends one request per
+   * CORE_KV_SETTINGS_BATCH_SIZE ids, one after another, so each request stays small however many
+   * users the tenant has. Returns null when the backend doesn't have the batch endpoint yet (404),
+   * so callers can fall back to per-user requests during a staggered deploy.
    */
-  async getAllUsersCoreKVSettings(): Promise<Record<string, UserCoreKVSetting[]> | null> {
-    try {
-      const response = await apiClient.get('/user-settings/core-kv-settings/');
-      const results = response.data?.results;
-      return results && typeof results === 'object' ? results : {};
-    } catch (error: any) {
-      if (error.response?.status === 404) return null;
-      throw error;
+  async getCoreKVSettingsForMembers(membershipIds: number[]): Promise<Record<string, CoreKvRow[]> | null> {
+    const ids = [...new Set(membershipIds)];
+    const batches: number[][] = [];
+    for (let start = 0; start < ids.length; start += CORE_KV_SETTINGS_BATCH_SIZE) {
+      batches.push(ids.slice(start, start + CORE_KV_SETTINGS_BATCH_SIZE));
     }
+    if (batches.length > CORE_KV_SETTINGS_BATCH_WARNING_THRESHOLD) {
+      console.warn(
+        `[userSettings] Loading core settings in ${batches.length} batches (${ids.length} users); ` +
+          'consider paginating the Settings page.'
+      );
+    }
+
+    const byMembership: Record<string, CoreKvRow[]> = {};
+    for (const batch of batches) {
+      let results: Record<string, Record<string, unknown>> | undefined;
+      try {
+        const response = await apiClient.get('/user-settings/core-kv-settings/', {
+          params: { membership_ids: batch.join(',') },
+        });
+        results = response.data?.results;
+      } catch (error: any) {
+        if (error.response?.status === 404) return null;
+        throw error;
+      }
+      Object.entries(results ?? {}).forEach(([membershipId, values]) => {
+        byMembership[membershipId] = Object.entries(values ?? {}).map(([key, value]) => ({
+          key: key as UserCoreKVSetting['key'],
+          value,
+        }));
+      });
+    }
+    return byMembership;
   },
 
   async patchSupportDailyLimits(
