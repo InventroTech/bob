@@ -32,6 +32,7 @@ const AddUserPage = () => {
   const [formData, setFormData] = useState({ name: '', email: '', department: '' });
   const [showRoleFields, setShowRoleFields] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
 
   const {
     data: roles = [],
@@ -157,9 +158,8 @@ const AddUserPage = () => {
   };
 
   const handleDeleteUser = async (email: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) {
-      return;
-    }
+    if (deletingEmail) return;
+    setDeletingEmail(email);
 
     try {
       const token = await getEffectiveToken(session?.access_token ?? null);
@@ -176,7 +176,7 @@ const AddUserPage = () => {
       }
 
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/accounts/delete-user/`;
+      const apiUrl = `${baseUrl}/accounts/delete-user-with-log/`;
 
       const response = await fetch(apiUrl, {
         method: 'DELETE',
@@ -210,6 +210,8 @@ const AddUserPage = () => {
       console.error('Error deleting user:', error);
       const message = error instanceof Error ? error.message : 'Failed to delete user';
       toast.error(message);
+    } finally {
+      setDeletingEmail(null);
     }
   };
 
@@ -449,6 +451,7 @@ const AddUserPage = () => {
                               size="icon"
                               className="text-red-500 hover:text-red-700 hover:bg-red-50"
                               onClick={() => handleDeleteUser(user.email)}
+                              disabled={deletingEmail === user.email}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -516,6 +519,7 @@ const AddUserPage = () => {
                         variant="destructive"
                         size="sm"
                         onClick={() => handleDeleteUser(user.email)}
+                        disabled={deletingEmail === user.email}
                       >
                         <Trash2 className="mr-1 h-4 w-4" />
                         Delete

@@ -12,6 +12,8 @@ import type { AddUserModel } from './useAddUser';
 import type { User } from './types';
 import { formatResolveRateGoal, isCseRole } from './utils';
 import { useUserManagementConfig } from './useUserManagementConfig';
+import { DownloadDeletedUsersButton } from './DownloadDeletedUsersButton';
+import { useDeleteUserFlow } from './useDeleteUserFlow';
 import {
   getColumnLabel,
   isBoundCustomField,
@@ -225,6 +227,16 @@ export function AddUserView(props: AddUserModel) {
   );
   const customTableFields = schema.customFields.filter((f) => f.showInTable);
   const [activityFilter, setActivityFilter] = useState<'all' | 'inactive'>('all');
+  const { deletingEmail, deleteUser } = useDeleteUserFlow({
+    users,
+    currentUserEmail: props.session?.user?.email,
+    tenantSlug,
+    navigate: props.navigate,
+    refresh: async () => {
+      await props.fetchUsers({ silent: true });
+      await props.fetchCoreSettings();
+    },
+  });
   const inactiveCount = filteredUsersWithSettings.filter(isInactiveSignIn).length;
   const visibleUsers =
     activityFilter === 'inactive'
@@ -806,7 +818,9 @@ export function AddUserView(props: AddUserModel) {
                     variant="outline"
                     size="icon"
                     className="h-8 w-8 text-destructive"
-                    onClick={() => handleDeleteUser(user.email, user.uid)}
+                    aria-label={`Delete ${user.email}`}
+                    onClick={() => void deleteUser(user)}
+                    disabled={deletingEmail === user.email}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -1434,7 +1448,7 @@ export function AddUserView(props: AddUserModel) {
             </div>
             <div
               className={cn(
-                'flex w-full flex-col gap-3 sm:max-w-lg sm:flex-row sm:items-center',
+                'flex w-full flex-col gap-3 sm:max-w-3xl sm:flex-row sm:items-center',
                 isUnmannd &&
                   'ml-auto flex w-auto max-w-none flex-nowrap flex-row items-center gap-2 sm:max-w-none'
               )}
@@ -1442,6 +1456,7 @@ export function AddUserView(props: AddUserModel) {
               <div
                 className={cn(
                   'relative flex h-11 w-full items-center sm:flex-1',
+                  !isUnmannd && 'sm:min-w-[20rem]',
                   isUnmannd && 'h-11 w-[min(100%,18rem)] shrink-0 sm:w-[18rem] sm:flex-none'
                 )}
               >
@@ -1483,6 +1498,14 @@ export function AddUserView(props: AddUserModel) {
                   {usersPdfLoading ? 'Generating…' : 'Download PDF'}
                 </span>
               </Button>
+              <DownloadDeletedUsersButton
+                variant={isUnmannd ? 'default' : 'outline'}
+                className={cn(
+                  'h-11 shrink-0 border-black text-black hover:bg-black hover:text-white inline-flex items-center justify-center',
+                  isUnmannd && cn(DOWNLOAD_PDF_BTN, 'h-11 self-center')
+                )}
+                iconClassName={isUnmannd ? 'mr-0 h-3.5 w-3.5' : 'mr-2 h-4 w-4'}
+              />
             </div>
           </div>
           {isLoading ? (
@@ -1723,8 +1746,9 @@ export function AddUserView(props: AddUserModel) {
                             variant="outline"
                             size="icon"
                             className="text-red-500 border-red-200"
-                            onClick={() => handleDeleteUser(user.email, user.uid)}
-                            disabled={editingRowKey === getRowKey(user)}
+                            aria-label={`Delete ${user.email}`}
+                            onClick={() => void deleteUser(user)}
+                            disabled={editingRowKey === getRowKey(user) || deletingEmail === user.email}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
