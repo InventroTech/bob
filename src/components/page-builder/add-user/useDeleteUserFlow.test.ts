@@ -52,7 +52,7 @@ describe('useDeleteUserFlow', () => {
     expect(result.current.deletingEmail).toBeNull();
   });
 
-  it('deletes straight away, without asking for confirmation or a reason', async () => {
+  it('deletes straight away, without asking for confirmation', async () => {
     const { result, navigate, refresh } = setup();
 
     await act(() => result.current.deleteUser(ravi));

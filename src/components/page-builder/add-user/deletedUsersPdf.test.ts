@@ -38,7 +38,6 @@ const user = (overrides: Partial<DeletedUser> = {}): DeletedUser => ({
   created_at: '2026-01-05T04:30:00Z',
   deleted_at: '2026-11-04T10:00:00Z',
   deleted_by: 'admin@praja.in',
-  deletion_reason: 'Left the company',
   ...overrides,
 });
 
@@ -93,7 +92,6 @@ describe('deletedUsersPdfRows', () => {
         created_at: null,
         deleted_at: null,
         deleted_by: null,
-        deletion_reason: null,
       }),
     ]);
 
@@ -111,13 +109,6 @@ describe('deletedUsersPdfRows', () => {
       'Deleted at',
       'Deleted by',
     ]);
-  });
-
-  it('never puts the deletion reason in the PDF', () => {
-    const [row] = deletedUsersPdfRows([user({ deletion_reason: 'Left the company' })]);
-
-    expect(row).not.toContain('Left the company');
-    expect(row).toHaveLength(7);
   });
 });
 
