@@ -38,7 +38,6 @@ const deletedUser: DeletedUser = {
   created_at: null,
   deleted_at: '2026-11-04T10:00:00Z',
   deleted_by: 'admin@praja.in',
-  deletion_reason: '',
 };
 
 let drawRectangle: ReturnType<typeof vi.spyOn>;
