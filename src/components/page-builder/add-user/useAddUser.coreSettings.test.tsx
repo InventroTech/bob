@@ -31,7 +31,7 @@ vi.mock('@/lib/api/services/userSettings', async (importOriginal) => {
     ...actual,
     leadTypeAssignmentApi: {
       ...actual.leadTypeAssignmentApi,
-      getAllUsersCoreKVSettings: vi.fn(),
+      getCoreKVSettingsForMembers: vi.fn(),
       getUserCoreKVSettings: vi.fn(),
       getAvailableQueueTypes: vi.fn().mockResolvedValue([]),
       getGeoPartyCatalog: vi.fn().mockResolvedValue({ states: [], districts: [], parties: [] }),
@@ -40,7 +40,7 @@ vi.mock('@/lib/api/services/userSettings', async (importOriginal) => {
   };
 });
 
-const getAll = vi.mocked(leadTypeAssignmentApi.getAllUsersCoreKVSettings);
+const getAll = vi.mocked(leadTypeAssignmentApi.getCoreKVSettingsForMembers);
 const getOne = vi.mocked(leadTypeAssignmentApi.getUserCoreKVSettings);
 
 const kvRow = (membership: number, key: string, value: unknown) => ({
@@ -85,17 +85,17 @@ describe('useAddUser core settings loading', () => {
     vi.unstubAllGlobals();
   });
 
-  it('loads every user’s settings with one bulk request', async () => {
+  it('loads every user’s settings through the batch loader, not one request per user', async () => {
     getAll.mockResolvedValue({
-      '67': [kvRow(67, 'DAILY_TARGET', 10)],
-      '68': [kvRow(68, 'DAILY_TARGET', 25)],
+      '67': [{ key: 'DAILY_TARGET', value: 10 }],
+      '68': [{ key: 'DAILY_TARGET', value: 25 }],
     });
 
     const { result } = renderHook(() => useAddUser({ config: {} }), { wrapper });
 
     await waitFor(() => expect(dailyTargetOf(result, 'ravi@example.com')).toBe(25));
     expect(dailyTargetOf(result, 'asha@example.com')).toBe(10);
-    expect(getAll).toHaveBeenCalledTimes(1);
+    expect(getAll).toHaveBeenCalledWith([67, 68]);
     expect(getOne).not.toHaveBeenCalled();
   });
 

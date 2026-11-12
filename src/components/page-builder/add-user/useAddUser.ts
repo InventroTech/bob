@@ -7,7 +7,7 @@ import { forceLogoutIfDeletedSelf } from '@/lib/auth/deletedUserSession';
 import { toast } from 'sonner';
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
-import { leadTypeAssignmentApi, groupsApi } from '@/lib/api/services/userSettings';
+import { leadTypeAssignmentApi, groupsApi, type CoreKvRow } from '@/lib/api/services/userSettings';
 import { downloadUsersReportPdf } from '@/lib/pdf/usersReport';
 import type {
   Role,
@@ -182,8 +182,10 @@ export function useAddUser({ config }: AddUserComponentProps) {
     try {
       const mapped: Record<string, UserCoreSettingsSummary> = {};
       const usersWithMembershipId = users.filter((u) => !!u.tenant_membership_id);
-      const kvByMembership = await leadTypeAssignmentApi.getAllUsersCoreKVSettings();
-      const rows = kvByMembership
+      const kvByMembership = await leadTypeAssignmentApi.getCoreKVSettingsForMembers(
+        usersWithMembershipId.map((u) => Number(u.tenant_membership_id))
+      );
+      const rows: { emailKey: string; kv: CoreKvRow[] }[] = kvByMembership
         ? usersWithMembershipId.map((u) => ({
             emailKey: (u.email || '').toLowerCase(),
             kv: kvByMembership[String(u.tenant_membership_id)] ?? [],
