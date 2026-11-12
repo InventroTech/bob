@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../client', () => ({ apiClient: { get } }));
 
-import { rmActivityApi, type RmActivityEventDto } from './rmActivity';
+import { clearRmActivityCache, rmActivityApi, type RmActivityEventDto } from './rmActivity';
 
 type Params = { from?: string; to?: string; page: number; page_size: number };
 
@@ -28,6 +28,7 @@ const requestedParams = () => get.mock.calls.map(([, config]) => config.params a
 describe('rmActivityApi.getEvents', () => {
   beforeEach(() => {
     get.mockReset();
+    clearRmActivityCache();
   });
 
   it('fetches a multi-day range one day at a time', async () => {
