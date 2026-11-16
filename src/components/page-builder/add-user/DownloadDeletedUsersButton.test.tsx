@@ -7,12 +7,16 @@ import { DownloadDeletedUsersButton } from './DownloadDeletedUsersButton';
 
 const listDeletedUsers = vi.fn();
 const downloadDeletedUsersExcel = vi.fn();
+const useAuth = vi.fn(() => ({ user: { email: 'rm@praja.buzz' } }));
 
 vi.mock('@/lib/api/services/deletedUsers', () => ({
   deletedUsersService: { list: () => listDeletedUsers() },
 }));
 vi.mock('./deletedUsersExcel', () => ({
   downloadDeletedUsersExcel: (...args: unknown[]) => downloadDeletedUsersExcel(...args),
+}));
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => useAuth(),
 }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
@@ -35,6 +39,8 @@ const button = () => screen.getByRole('button', { name: /deleted users|generatin
 beforeEach(() => {
   listDeletedUsers.mockReset();
   downloadDeletedUsersExcel.mockReset();
+  useAuth.mockReset();
+  useAuth.mockReturnValue({ user: { email: 'rm@praja.buzz' } });
   vi.mocked(toast.error).mockReset();
 });
 
@@ -53,8 +59,27 @@ describe('DownloadDeletedUsersButton', () => {
 
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(users));
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(users, expect.any(Date), 'rm@praja.buzz'),
+    );
     expect(listDeletedUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes Prasant’s email through so his download stays editable', async () => {
+    const users = [user()];
+    useAuth.mockReturnValue({ user: { email: 'durgaprasanth.ambati@praja.buzz' } });
+    listDeletedUsers.mockResolvedValue(users);
+    render(<DownloadDeletedUsersButton />);
+
+    fireEvent.click(button());
+
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(
+        users,
+        expect.any(Date),
+        'durgaprasanth.ambati@praja.buzz',
+      ),
+    );
   });
 
   it('fetches a fresh list on every click', async () => {
@@ -75,7 +100,9 @@ describe('DownloadDeletedUsersButton', () => {
 
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersExcel).toHaveBeenCalledWith([]));
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith([], expect.any(Date), 'rm@praja.buzz'),
+    );
   });
 
   it('shows an error and downloads nothing when the list cannot be loaded', async () => {
