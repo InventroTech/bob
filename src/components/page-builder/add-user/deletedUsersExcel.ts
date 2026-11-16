@@ -14,14 +14,7 @@ export const DELETED_USERS_EXCEL_HEADERS = [
   'Deleted by',
 ] as const;
 
-/** Only this account gets an editable download; everyone else gets a protected sheet. */
-export const DELETED_USERS_EXCEL_EDITOR_EMAIL = 'durgaprasanth.ambati@praja.buzz';
-
 const SHEET_NAME = 'Deleted Users';
-
-export function canEditDeletedUsersExcel(downloaderEmail: string | null | undefined): boolean {
-  return (downloaderEmail ?? '').trim().toLowerCase() === DELETED_USERS_EXCEL_EDITOR_EMAIL;
-}
 
 /** The backend stores UTC without a zone (USE_TZ = False), so a bare timestamp is read as UTC, not local time. */
 const asUtc = (value: string) =>
@@ -64,13 +57,8 @@ function triggerDownload(blob: Blob, filename: string) {
 /**
  * Builds a real .xlsx of deleted users (not a renamed CSV). Only writes rows already
  * held in memory — never parses a file — so it doesn't use the xlsx package's read path.
- * Anyone may download; only {@link DELETED_USERS_EXCEL_EDITOR_EMAIL} gets an editable sheet.
  */
-export function downloadDeletedUsersExcel(
-  users: DeletedUser[],
-  now: Date = new Date(),
-  downloaderEmail?: string | null,
-): void {
+export function downloadDeletedUsersExcel(users: DeletedUser[], now: Date = new Date()): void {
   if (users.length === 0) {
     toast.error('No deleted users to download');
     return;
@@ -81,13 +69,6 @@ export function downloadDeletedUsersExcel(
       [...DELETED_USERS_EXCEL_HEADERS],
       ...deletedUsersExcelRows(users),
     ]);
-    if (!canEditDeletedUsersExcel(downloaderEmail)) {
-      // Soft lock in Excel/Google Sheets: cells stay selectable, edits need Unprotect Sheet.
-      worksheet['!protect'] = {
-        selectLockedCells: true,
-        selectUnlockedCells: true,
-      };
-    }
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, SHEET_NAME);
     const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
