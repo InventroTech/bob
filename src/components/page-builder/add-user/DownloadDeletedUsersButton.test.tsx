@@ -6,13 +6,13 @@ import type { DeletedUser } from '@/lib/api/services/deletedUsers';
 import { DownloadDeletedUsersButton } from './DownloadDeletedUsersButton';
 
 const listDeletedUsers = vi.fn();
-const downloadDeletedUsersPdf = vi.fn();
+const downloadDeletedUsersExcel = vi.fn();
 
 vi.mock('@/lib/api/services/deletedUsers', () => ({
   deletedUsersService: { list: () => listDeletedUsers() },
 }));
-vi.mock('./deletedUsersPdf', () => ({
-  downloadDeletedUsersPdf: (...args: unknown[]) => downloadDeletedUsersPdf(...args),
+vi.mock('./deletedUsersExcel', () => ({
+  downloadDeletedUsersExcel: (...args: unknown[]) => downloadDeletedUsersExcel(...args),
 }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
@@ -34,7 +34,7 @@ const button = () => screen.getByRole('button', { name: /deleted users|generatin
 
 beforeEach(() => {
   listDeletedUsers.mockReset();
-  downloadDeletedUsersPdf.mockReset().mockResolvedValue(undefined);
+  downloadDeletedUsersExcel.mockReset();
   vi.mocked(toast.error).mockReset();
 });
 
@@ -46,14 +46,14 @@ describe('DownloadDeletedUsersButton', () => {
     expect(button().disabled).toBe(false);
   });
 
-  it('downloads every deleted user as a PDF', async () => {
+  it('downloads every deleted user as an Excel file', async () => {
     const users = [user(), user({ id: 'log-2', email: 'ravi@praja.in' })];
     listDeletedUsers.mockResolvedValue(users);
     render(<DownloadDeletedUsersButton />);
 
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersPdf).toHaveBeenCalledWith(users));
+    await waitFor(() => expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(users));
     expect(listDeletedUsers).toHaveBeenCalledTimes(1);
   });
 
@@ -65,17 +65,17 @@ describe('DownloadDeletedUsersButton', () => {
     await waitFor(() => expect(button().disabled).toBe(false));
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersPdf).toHaveBeenCalledTimes(2));
-    expect(downloadDeletedUsersPdf.mock.calls[1][0]).toHaveLength(2);
+    await waitFor(() => expect(downloadDeletedUsersExcel).toHaveBeenCalledTimes(2));
+    expect(downloadDeletedUsersExcel.mock.calls[1][0]).toHaveLength(2);
   });
 
-  it('passes an empty list through, so the PDF helper can say there is nobody to download', async () => {
+  it('passes an empty list through, so the Excel helper can say there is nobody to download', async () => {
     listDeletedUsers.mockResolvedValue([]);
     render(<DownloadDeletedUsersButton />);
 
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersPdf).toHaveBeenCalledWith([]));
+    await waitFor(() => expect(downloadDeletedUsersExcel).toHaveBeenCalledWith([]));
   });
 
   it('shows an error and downloads nothing when the list cannot be loaded', async () => {
@@ -85,7 +85,7 @@ describe('DownloadDeletedUsersButton', () => {
     fireEvent.click(button());
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Could not load deleted users. Please try again.'));
-    expect(downloadDeletedUsersPdf).not.toHaveBeenCalled();
+    expect(downloadDeletedUsersExcel).not.toHaveBeenCalled();
     await waitFor(() => expect(button().disabled).toBe(false));
   });
 
