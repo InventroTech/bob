@@ -134,6 +134,62 @@ async function fetchEventWindow(params: {
   return rows;
 }
 
+interface GetEventsParams {
+  from?: string;
+  to?: string;
+  rmUserId?: string;
+  managerUserId?: string;
+}
+
+async function fetchAllDays(params: GetEventsParams): Promise<RmActivityEventDto[]> {
+  const days = splitIntoDayWindows(params.from, params.to);
+  if (!days || days.length === 1) {
+    return fetchEventWindow(params);
+  }
+
+  const perDay: RmActivityEventDto[][] = new Array(days.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < days.length) {
+      const index = next++;
+      perDay[index] = await fetchEventWindow({ ...params, from: days[index], to: days[index] });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(PARALLEL_DAY_WINDOWS, days.length) }, worker));
+  return perDay.flat();
+}
+
+// Short-lived request cache keyed by the exact params — collapses the
+// common case of a tab switch or an accidental double-render re-asking for
+// the same (date range, RM/manager scope) within a few seconds of the last
+// fetch, which otherwise re-downloads and re-pages through the same rows.
+// Does NOT help a genuinely new date range/filter (nothing to dedupe
+// against) — that first load still pays the full cost; see getEvents'
+// own docstring for why that's a data-volume problem no cache fixes.
+const EVENTS_CACHE_TTL_MS = 20_000;
+const eventsRequestCache = new Map<string, { expiresAt: number; promise: Promise<RmActivityEventDto[]> }>();
+
+/** Forces the next getEvents call (any params) to actually refetch instead
+ * of returning a cached result — wire into a manual "Refresh" action. */
+export function clearRmActivityCache(): void {
+  eventsRequestCache.clear();
+}
+
+function cachedFetchAllDays(params: GetEventsParams): Promise<RmActivityEventDto[]> {
+  const key = JSON.stringify(params);
+  const now = Date.now();
+  const cached = eventsRequestCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.promise;
+
+  const promise = fetchAllDays(params).catch((err) => {
+    // a failed fetch must not poison the cache for the next real attempt
+    eventsRequestCache.delete(key);
+    throw err;
+  });
+  eventsRequestCache.set(key, { expiresAt: now + EVENTS_CACHE_TTL_MS, promise });
+  return promise;
+}
+
 export const rmActivityApi = {
   /**
    * `from`/`to` are "YYYY-MM-DD" — omit both to get the backend's default
@@ -141,33 +197,19 @@ export const rmActivityApi = {
    * RM's own rows (e.g. the lead-card "Your Shift" panel), omit for every
    * RM. `managerUserId` narrows to one manager's own hierarchy — direct +
    * indirect reports (RM PRD's ASM "my team" view) — omit for the whole
-   * tenant. Pages through the response until exhausted.
+   * tenant. Pages through the response until exhausted, with a short
+   * request cache (see clearRmActivityCache) collapsing repeat identical
+   * calls — not a fix for the cost of a genuinely new/wide range, which is
+   * a data-volume problem: a busy tenant can log 15-20k+ touches in a
+   * single day, so a 30-day range means downloading hundreds of thousands
+   * of rows to sum client-side regardless of how this request is cached.
    *
    * Multi-day ranges are fetched one day at a time: the backend pages with
    * OFFSET, so one 30-day tenant-wide window reached OFFSET ~400k and each
    * deep page took seconds (and the page cap silently dropped rows past it).
    */
-  async getEvents(params?: {
-    from?: string;
-    to?: string;
-    rmUserId?: string;
-    managerUserId?: string;
-  }): Promise<RmActivityEventDto[]> {
-    const days = splitIntoDayWindows(params?.from, params?.to);
-    if (!days || days.length === 1) {
-      return fetchEventWindow(params ?? {});
-    }
-
-    const perDay: RmActivityEventDto[][] = new Array(days.length);
-    let next = 0;
-    const worker = async () => {
-      while (next < days.length) {
-        const index = next++;
-        perDay[index] = await fetchEventWindow({ ...params, from: days[index], to: days[index] });
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(PARALLEL_DAY_WINDOWS, days.length) }, worker));
-    return perDay.flat();
+  async getEvents(params?: GetEventsParams): Promise<RmActivityEventDto[]> {
+    return cachedFetchAllDays(params ?? {});
   },
 
   /** Real filter-bar values — managers from TenantMembership, groups from

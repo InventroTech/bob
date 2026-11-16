@@ -36,6 +36,7 @@ import {
   type RmPerformanceRow,
 } from './rm-prd-analytics/aggregate';
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
+import { clearRmActivityCache } from '@/lib/api/services/rmActivity';
 import { useRmActiveSessions } from './rm-prd-analytics/useRmActiveSessions';
 import { useRmDailyTargets } from './rm-prd-analytics/useRmDailyTargets';
 import {
@@ -165,6 +166,18 @@ function loadStoredTab(): Tab {
   return window.localStorage.getItem(tabStorageKey()) === 'adherence' ? 'adherence' : 'performance';
 }
 
+// This business runs in IST — format explicitly in that timezone rather
+// than the viewer's own, same convention as touchData.ts's formatClock.
+function formatIstClock(d: Date): string {
+  return d.toLocaleTimeString('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }) + ' IST';
+}
+
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
 // rows fetched from the backend — see useRmActivityEvents + aggregate.ts.
 // Manager/leadGroup/state/party/date-range all filter visibleEvents (see below).
@@ -198,6 +211,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        clearRmActivityCache();
         setRefreshTick((t) => t + 1);
       }
     };
@@ -240,6 +254,13 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     refreshTick,
     isAsmView ? activeUserId ?? undefined : undefined
   );
+  // Stamped the moment the main events fetch last completed successfully —
+  // shown below the Refresh button so it's clear how fresh what's on
+  // screen actually is, since nothing here auto-polls.
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  useEffect(() => {
+    if (!loading && !error) setLastUpdatedAt(new Date());
+  }, [loading, error]);
   // targets are already summed server-side across dateBounds (day-by-day
   // overrides where a manager set one, else the RM's standing DAILY_TARGET)
   const { targets: dailyTargets } = useRmDailyTargets(dateBounds, refreshTick);
@@ -358,15 +379,23 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         ) : (
           <div />
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setRefreshTick((t) => t + 1)}
-          className="gap-1.5"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Refresh
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              clearRmActivityCache();
+              setRefreshTick((t) => t + 1);
+            }}
+            className="gap-1.5"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </Button>
+          {lastUpdatedAt && (
+            <span className="text-xs text-stone-400">Last updated at {formatIstClock(lastUpdatedAt)}</span>
+          )}
+        </div>
       </div>
 
       <FilterBar
