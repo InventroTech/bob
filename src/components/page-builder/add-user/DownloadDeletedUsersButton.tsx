@@ -3,7 +3,6 @@ import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button, type ButtonProps } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
 import { deletedUsersService } from '@/lib/api/services/deletedUsers';
 import { cn } from '@/lib/utils';
 import { downloadDeletedUsersExcel } from './deletedUsersExcel';
@@ -16,14 +15,13 @@ interface DownloadDeletedUsersButtonProps {
 
 /** Fetches every deleted user for this organization and downloads them as an Excel file. */
 export function DownloadDeletedUsersButton({ variant = 'outline', className, iconClassName }: DownloadDeletedUsersButtonProps) {
-  const { user } = useAuth();
   const [downloading, setDownloading] = useState(false);
 
   const download = async () => {
     setDownloading(true);
     try {
       const users = await deletedUsersService.list();
-      downloadDeletedUsersExcel(users, new Date(), user?.email);
+      downloadDeletedUsersExcel(users);
     } catch {
       toast.error('Could not load deleted users. Please try again.');
     } finally {
