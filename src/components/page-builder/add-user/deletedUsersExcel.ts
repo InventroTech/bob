@@ -14,7 +14,20 @@ export const DELETED_USERS_EXCEL_HEADERS = [
   'Deleted by',
 ] as const;
 
+/** These accounts get an editable download; everyone else gets view-only. */
+export const DELETED_USERS_EXCEL_EDITOR_EMAILS = [
+  'harikishore.k@praja.buzz',
+  'durgaprasanth.ambati@praja.buzz',
+  'shreya@thepyro.ai',
+  'bibhab@thepyro.ai',
+] as const;
+
 const SHEET_NAME = 'Deleted Users';
+
+export function canEditDeletedUsersExcel(downloaderEmail: string | null | undefined): boolean {
+  const email = (downloaderEmail ?? '').trim().toLowerCase();
+  return DELETED_USERS_EXCEL_EDITOR_EMAILS.some((allowed) => allowed === email);
+}
 
 /** The backend stores UTC without a zone (USE_TZ = False), so a bare timestamp is read as UTC, not local time. */
 const asUtc = (value: string) =>
@@ -57,8 +70,13 @@ function triggerDownload(blob: Blob, filename: string) {
 /**
  * Builds a real .xlsx of deleted users (not a renamed CSV). Only writes rows already
  * held in memory — never parses a file — so it doesn't use the xlsx package's read path.
+ * Anyone may download; only {@link DELETED_USERS_EXCEL_EDITOR_EMAILS} get an editable sheet.
  */
-export function downloadDeletedUsersExcel(users: DeletedUser[], now: Date = new Date()): void {
+export function downloadDeletedUsersExcel(
+  users: DeletedUser[],
+  now: Date = new Date(),
+  downloaderEmail?: string | null,
+): void {
   if (users.length === 0) {
     toast.error('No deleted users to download');
     return;
@@ -69,6 +87,13 @@ export function downloadDeletedUsersExcel(users: DeletedUser[], now: Date = new 
       [...DELETED_USERS_EXCEL_HEADERS],
       ...deletedUsersExcelRows(users),
     ]);
+    const editable = canEditDeletedUsersExcel(downloaderEmail);
+    if (!editable) {
+      worksheet['!protect'] = {
+        selectLockedCells: true,
+        selectUnlockedCells: true,
+      };
+    }
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, SHEET_NAME);
     const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
@@ -76,7 +101,7 @@ export function downloadDeletedUsersExcel(users: DeletedUser[], now: Date = new 
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
     triggerDownload(blob, deletedUsersExcelFileName(now));
-    toast.success('Excel downloaded');
+    toast.success(editable ? 'Excel downloaded (editable)' : 'Excel downloaded (view only)');
   } catch (error) {
     console.error('Deleted users Excel download failed:', error);
     toast.error('Failed to generate Excel');
