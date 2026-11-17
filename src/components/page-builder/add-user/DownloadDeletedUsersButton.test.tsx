@@ -5,14 +5,27 @@ import { toast } from 'sonner';
 import type { DeletedUser } from '@/lib/api/services/deletedUsers';
 import { DownloadDeletedUsersButton } from './DownloadDeletedUsersButton';
 
-const listDeletedUsers = vi.fn();
-const downloadDeletedUsersExcel = vi.fn();
+const {
+  listDeletedUsers,
+  downloadDeletedUsersExcel,
+  useAuth,
+} = vi.hoisted(() => ({
+  listDeletedUsers: vi.fn(),
+  downloadDeletedUsersExcel: vi.fn(),
+  useAuth: vi.fn(() => ({
+    user: { email: 'rm@praja.buzz' },
+    session: { user: { email: 'rm@praja.buzz' } },
+  })),
+}));
 
 vi.mock('@/lib/api/services/deletedUsers', () => ({
   deletedUsersService: { list: () => listDeletedUsers() },
 }));
 vi.mock('./deletedUsersExcel', () => ({
   downloadDeletedUsersExcel: (...args: unknown[]) => downloadDeletedUsersExcel(...args),
+}));
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => useAuth(),
 }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
@@ -35,26 +48,45 @@ const button = () => screen.getByRole('button', { name: /deleted users|generatin
 beforeEach(() => {
   listDeletedUsers.mockReset();
   downloadDeletedUsersExcel.mockReset();
+  useAuth.mockReset();
+  useAuth.mockReturnValue({
+    user: { email: 'rm@praja.buzz' },
+    session: { user: { email: 'rm@praja.buzz' } },
+  });
   vi.mocked(toast.error).mockReset();
 });
 
 describe('DownloadDeletedUsersButton', () => {
-  it('shows "Deleted Users"', () => {
+  it('shows "Deleted Users" for everyone', () => {
     render(<DownloadDeletedUsersButton />);
 
     expect(button().textContent).toContain('Deleted Users');
     expect(button().disabled).toBe(false);
   });
 
-  it('downloads every deleted user as an Excel file', async () => {
+  it('downloads with the logged-in email so edit vs view-only can be applied', async () => {
     const users = [user(), user({ id: 'log-2', email: 'ravi@praja.in' })];
     listDeletedUsers.mockResolvedValue(users);
     render(<DownloadDeletedUsersButton />);
 
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(users));
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(users, expect.any(Date), 'rm@praja.buzz'),
+    );
     expect(listDeletedUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers the session email passed from the page', async () => {
+    const users = [user()];
+    listDeletedUsers.mockResolvedValue(users);
+    render(<DownloadDeletedUsersButton downloaderEmail="shreya@thepyro.ai" />);
+
+    fireEvent.click(button());
+
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(users, expect.any(Date), 'shreya@thepyro.ai'),
+    );
   });
 
   it('fetches a fresh list on every click', async () => {
@@ -75,7 +107,9 @@ describe('DownloadDeletedUsersButton', () => {
 
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersExcel).toHaveBeenCalledWith([]));
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith([], expect.any(Date), 'rm@praja.buzz'),
+    );
   });
 
   it('shows an error and downloads nothing when the list cannot be loaded', async () => {
