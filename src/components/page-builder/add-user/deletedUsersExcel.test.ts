@@ -4,14 +4,16 @@ import { toast } from 'sonner';
 
 import type { DeletedUser } from '@/lib/api/services/deletedUsers';
 import {
+  DELETED_USERS_EXCEL_EDITOR_EMAILS,
   DELETED_USERS_EXCEL_HEADERS,
+  canEditDeletedUsersExcel,
   deletedUsersExcelFileName,
   deletedUsersExcelRows,
   downloadDeletedUsersExcel,
   formatLogDate,
 } from './deletedUsersExcel';
 
-const aoaToSheet = vi.fn((rows: unknown[]) => ({ rows }));
+const aoaToSheet = vi.fn((rows: unknown[]) => ({ rows } as { rows: unknown[]; '!protect'?: unknown }));
 const bookNew = vi.fn(() => ({ sheets: [] as unknown[] }));
 const bookAppendSheet = vi.fn((workbook: { sheets: unknown[] }, worksheet: unknown, name: string) => {
   workbook.sheets.push({ worksheet, name });
@@ -148,6 +150,17 @@ describe('formatLogDate', () => {
   });
 });
 
+describe('canEditDeletedUsersExcel', () => {
+  it('allows only the three editor emails (case-insensitive)', () => {
+    for (const email of DELETED_USERS_EXCEL_EDITOR_EMAILS) {
+      expect(canEditDeletedUsersExcel(email)).toBe(true);
+      expect(canEditDeletedUsersExcel(email.toUpperCase())).toBe(true);
+    }
+    expect(canEditDeletedUsersExcel('someone.else@praja.buzz')).toBe(false);
+    expect(canEditDeletedUsersExcel(null)).toBe(false);
+  });
+});
+
 describe('deletedUsersExcelFileName', () => {
   it("names the file with today's date", () => {
     expect(deletedUsersExcelFileName(NOW)).toBe('Deleted_Users_Report_04_Nov_2026.xlsx');
@@ -158,21 +171,39 @@ describe('downloadDeletedUsersExcel', () => {
   it('writes a workbook with the header and one row per user', () => {
     const users = [user({ name: 'Asha' }), user({ id: 'log-2', name: 'Ravi' })];
 
-    downloadDeletedUsersExcel(users, NOW);
+    downloadDeletedUsersExcel(users, NOW, 'someone.else@praja.buzz');
 
     expect(aoaToSheet).toHaveBeenCalledWith([[...DELETED_USERS_EXCEL_HEADERS], ...deletedUsersExcelRows(users)]);
     expect(bookAppendSheet.mock.calls[0][2]).toBe('Deleted Users');
     expect(write).toHaveBeenCalledWith(expect.anything(), { bookType: 'xlsx', type: 'array' });
   });
 
+  it('leaves the sheet editable for an allowed editor', () => {
+    downloadDeletedUsersExcel([user()], NOW, DELETED_USERS_EXCEL_EDITOR_EMAILS[0]);
+
+    const worksheet = aoaToSheet.mock.results[0]?.value as { '!protect'?: unknown };
+    expect(worksheet['!protect']).toBeUndefined();
+    expect(toast.success).toHaveBeenCalledWith('Excel downloaded (editable)');
+  });
+
+  it('protects the sheet for everyone else (view only)', () => {
+    downloadDeletedUsersExcel([user()], NOW, 'rm@praja.buzz');
+
+    const worksheet = aoaToSheet.mock.results[0]?.value as { '!protect'?: unknown };
+    expect(worksheet['!protect']).toEqual({
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+    });
+    expect(toast.success).toHaveBeenCalledWith('Excel downloaded (view only)');
+  });
+
   it('downloads a real .xlsx file and says it worked', () => {
-    downloadDeletedUsersExcel([user()], NOW);
+    downloadDeletedUsersExcel([user()], NOW, DELETED_USERS_EXCEL_EDITOR_EMAILS[2]);
 
     expect(createObjectURL).toHaveBeenCalled();
     const blob = createObjectURL.mock.calls[0]![0]!;
     expect(blob.type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     expect(click).toHaveBeenCalled();
-    expect(toast.success).toHaveBeenCalledWith('Excel downloaded');
   });
 
   it('does nothing but say so when there is nobody to download', () => {
@@ -188,7 +219,7 @@ describe('downloadDeletedUsersExcel', () => {
     });
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    downloadDeletedUsersExcel([user()], NOW);
+    downloadDeletedUsersExcel([user()], NOW, DELETED_USERS_EXCEL_EDITOR_EMAILS[1]);
 
     expect(toast.error).toHaveBeenCalledWith('Failed to generate Excel');
     expect(click).not.toHaveBeenCalled();
