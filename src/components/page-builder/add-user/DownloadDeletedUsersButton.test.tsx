@@ -5,14 +5,27 @@ import { toast } from 'sonner';
 import type { DeletedUser } from '@/lib/api/services/deletedUsers';
 import { DownloadDeletedUsersButton } from './DownloadDeletedUsersButton';
 
-const listDeletedUsers = vi.fn();
-const downloadDeletedUsersPdf = vi.fn();
+const {
+  listDeletedUsers,
+  downloadDeletedUsersExcel,
+  useAuth,
+} = vi.hoisted(() => ({
+  listDeletedUsers: vi.fn(),
+  downloadDeletedUsersExcel: vi.fn(),
+  useAuth: vi.fn(() => ({
+    user: { email: 'rm@praja.buzz' },
+    session: { user: { email: 'rm@praja.buzz' } },
+  })),
+}));
 
 vi.mock('@/lib/api/services/deletedUsers', () => ({
   deletedUsersService: { list: () => listDeletedUsers() },
 }));
-vi.mock('./deletedUsersPdf', () => ({
-  downloadDeletedUsersPdf: (...args: unknown[]) => downloadDeletedUsersPdf(...args),
+vi.mock('./deletedUsersExcel', () => ({
+  downloadDeletedUsersExcel: (...args: unknown[]) => downloadDeletedUsersExcel(...args),
+}));
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => useAuth(),
 }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
@@ -34,27 +47,46 @@ const button = () => screen.getByRole('button', { name: /deleted users|generatin
 
 beforeEach(() => {
   listDeletedUsers.mockReset();
-  downloadDeletedUsersPdf.mockReset().mockResolvedValue(undefined);
+  downloadDeletedUsersExcel.mockReset();
+  useAuth.mockReset();
+  useAuth.mockReturnValue({
+    user: { email: 'rm@praja.buzz' },
+    session: { user: { email: 'rm@praja.buzz' } },
+  });
   vi.mocked(toast.error).mockReset();
 });
 
 describe('DownloadDeletedUsersButton', () => {
-  it('shows "Deleted Users"', () => {
+  it('shows "Deleted Users" for everyone', () => {
     render(<DownloadDeletedUsersButton />);
 
     expect(button().textContent).toContain('Deleted Users');
     expect(button().disabled).toBe(false);
   });
 
-  it('downloads every deleted user as a PDF', async () => {
+  it('downloads with the logged-in email so edit vs view-only can be applied', async () => {
     const users = [user(), user({ id: 'log-2', email: 'ravi@praja.in' })];
     listDeletedUsers.mockResolvedValue(users);
     render(<DownloadDeletedUsersButton />);
 
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersPdf).toHaveBeenCalledWith(users));
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(users, expect.any(Date), 'rm@praja.buzz'),
+    );
     expect(listDeletedUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers the session email passed from the page', async () => {
+    const users = [user()];
+    listDeletedUsers.mockResolvedValue(users);
+    render(<DownloadDeletedUsersButton downloaderEmail="shreya@thepyro.ai" />);
+
+    fireEvent.click(button());
+
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith(users, expect.any(Date), 'shreya@thepyro.ai'),
+    );
   });
 
   it('fetches a fresh list on every click', async () => {
@@ -65,17 +97,19 @@ describe('DownloadDeletedUsersButton', () => {
     await waitFor(() => expect(button().disabled).toBe(false));
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersPdf).toHaveBeenCalledTimes(2));
-    expect(downloadDeletedUsersPdf.mock.calls[1][0]).toHaveLength(2);
+    await waitFor(() => expect(downloadDeletedUsersExcel).toHaveBeenCalledTimes(2));
+    expect(downloadDeletedUsersExcel.mock.calls[1][0]).toHaveLength(2);
   });
 
-  it('passes an empty list through, so the PDF helper can say there is nobody to download', async () => {
+  it('passes an empty list through, so the Excel helper can say there is nobody to download', async () => {
     listDeletedUsers.mockResolvedValue([]);
     render(<DownloadDeletedUsersButton />);
 
     fireEvent.click(button());
 
-    await waitFor(() => expect(downloadDeletedUsersPdf).toHaveBeenCalledWith([]));
+    await waitFor(() =>
+      expect(downloadDeletedUsersExcel).toHaveBeenCalledWith([], expect.any(Date), 'rm@praja.buzz'),
+    );
   });
 
   it('shows an error and downloads nothing when the list cannot be loaded', async () => {
@@ -85,7 +119,7 @@ describe('DownloadDeletedUsersButton', () => {
     fireEvent.click(button());
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Could not load deleted users. Please try again.'));
-    expect(downloadDeletedUsersPdf).not.toHaveBeenCalled();
+    expect(downloadDeletedUsersExcel).not.toHaveBeenCalled();
     await waitFor(() => expect(button().disabled).toBe(false));
   });
 
