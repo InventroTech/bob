@@ -1505,6 +1505,7 @@ export function AddUserView(props: AddUserModel) {
                   isUnmannd && cn(DOWNLOAD_PDF_BTN, 'h-11 self-center')
                 )}
                 iconClassName={isUnmannd ? 'mr-0 h-3.5 w-3.5' : 'mr-2 h-4 w-4'}
+                downloaderEmail={props.session?.user?.email}
               />
             </div>
           </div>
