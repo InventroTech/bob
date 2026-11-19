@@ -31,8 +31,10 @@ export function initFaro(config: FaroConfig): void {
       /sentry\.io/i,
     ],
     instrumentations: [
+      // captureConsole floods Grafana Cloud Logs (Free tier ~50GB/mo).
+      // Keep errors/vitals/sessions; enable console only when debugging.
       ...getWebInstrumentations({
-        captureConsole: true,
+        captureConsole: import.meta.env.VITE_FARO_CAPTURE_CONSOLE === 'true',
       }),
       ...(enableTracing ? [new TracingInstrumentation()] : []),
     ],
