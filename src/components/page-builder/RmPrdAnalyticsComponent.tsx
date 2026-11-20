@@ -94,6 +94,14 @@ export interface RmPrdAnalyticsConfig {
    * so existing pages don't suddenly show an empty filter.
    */
   managerRoles?: string[];
+  /**
+   * Shows a "Manager Leaderboard" tab — each manager (one of managerRoles,
+   * same list the Manager filter dropdown uses) ranked by their team's
+   * total achieved ÷ target, summed from the same per-RM rows the
+   * Performance tab already computes. Off by default: meant for the 1-2
+   * senior-manager-facing page configs that want it, not every RM PRD page.
+   */
+  showManagerLeaderboard?: boolean;
 }
 
 interface RmPrdAnalyticsComponentProps {
@@ -115,7 +123,7 @@ export const shouldShowFilter = (
   return isFilterVisible(config, key);
 };
 
-type Tab = 'performance' | 'adherence';
+type Tab = 'performance' | 'adherence' | 'leaderboard' | 'manager-leaderboard';
 
 const DEFAULT_FILTERS = {
   manager: 'All managers',
@@ -177,6 +185,12 @@ function formatIstClock(d: Date): string {
     second: '2-digit',
     hour12: false,
   }) + ' IST';
+}
+
+// No target set reads as -Infinity, so it always sorts last — same rule
+// formatVsTarget (aggregate.ts) and the "vs Target" column sort already use.
+function vsTargetRatio({ achieved, target }: { achieved: number; target: number }): number {
+  return target ? achieved / target : -Infinity;
 }
 
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
@@ -284,6 +298,15 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     isAsmView ? activeUserId ?? undefined : undefined,
     refreshTick
   );
+
+  // Leaderboard tabs are gone from here, too, not standing on their own —
+  // not a separate fetch/polling hook at all. Both are just a different
+  // view of the exact same performanceByRm rows the Performance tab
+  // already computes from visibleEvents/dailyTargets: same date range,
+  // same manager/lead-group/state/party filters, same per-viewMode server
+  // scoping (an RM's own events only, an ASM's team only, everyone for a
+  // manager). "Leaderboard" sorts those rows by vs-target %; "Manager
+  // Leaderboard" sums them per manager. See performanceByRm below.
   // leadGroup/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
   // BREAK_* rows don't carry a lead's group/state/party) — filtering the
   // whole event stream by them would silently drop real break/login rows
@@ -311,9 +334,39 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // that redundant internal pass simply never runs in the same render as
   // its already-computed counterpart anymore.
   const performanceByRm = useMemo(
-    () => (tab === 'performance' ? computePerformanceByRm(visibleEvents, dailyTargets) : []),
+    () =>
+      tab === 'performance' || tab === 'leaderboard' || tab === 'manager-leaderboard'
+        ? computePerformanceByRm(visibleEvents, dailyTargets)
+        : [],
     [tab, visibleEvents, dailyTargets]
   );
+  // Leaderboard = the same per-RM rows above, just sorted by achieved ÷
+  // target desc (no target set reads as -Infinity, so it always sorts
+  // last, same as "name"/"vsTarget" column sort does elsewhere on this
+  // page) — not a separate fetch, not a separate ranking concept.
+  const leaderboardByRm = useMemo(
+    () => (tab === 'leaderboard' ? [...performanceByRm].sort((a, b) => vsTargetRatio(b) - vsTargetRatio(a)) : []),
+    [tab, performanceByRm]
+  );
+  // Manager Leaderboard = the same rows, grouped by each RM's manager name
+  // and summed, restricted to names filterOptions.managers already knows
+  // about (that list is itself filtered to managerRoles server-side —
+  // see useRmFilterOptions — so an RM who happens to have a stray direct
+  // report never shows up here as a "manager").
+  const managerLeaderboard = useMemo(() => {
+    if (tab !== 'manager-leaderboard' || !config?.showManagerLeaderboard) return [];
+    const managerNames = new Set(filterOptions.managers);
+    const byManager = new Map<string, { manager: string; achieved: number; target: number; rmCount: number }>();
+    for (const row of performanceByRm) {
+      if (!managerNames.has(row.manager)) continue;
+      const entry = byManager.get(row.manager) ?? { manager: row.manager, achieved: 0, target: 0, rmCount: 0 };
+      entry.achieved += row.achieved;
+      entry.target += row.target;
+      entry.rmCount += 1;
+      byManager.set(row.manager, entry);
+    }
+    return [...byManager.values()].sort((a, b) => vsTargetRatio(b) - vsTargetRatio(a));
+  }, [tab, config?.showManagerLeaderboard, performanceByRm, filterOptions.managers]);
   const adherenceByRm = useMemo(
     () => (tab === 'adherence' ? computeAdherenceByRm(visibleEvents) : []),
     [tab, visibleEvents]
@@ -438,6 +491,14 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         <TabButton active={tab === 'performance'} onClick={() => setTab('performance')}>
           Performance
         </TabButton>
+        <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')}>
+          Leaderboard
+        </TabButton>
+        {config?.showManagerLeaderboard && (
+          <TabButton active={tab === 'manager-leaderboard'} onClick={() => setTab('manager-leaderboard')}>
+            Manager Leaderboard
+          </TabButton>
+        )}
       </div>
 
       <div className="mt-6">
@@ -469,6 +530,12 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             stateNameById={stateNameById}
             activeRmUserIds={activeRmUserIds}
           />
+        )}
+        {tab === 'leaderboard' && (
+          <LeaderboardView rows={leaderboardByRm} activeUserId={activeUserId} />
+        )}
+        {tab === 'manager-leaderboard' && config?.showManagerLeaderboard && (
+          <ManagerLeaderboardView rows={managerLeaderboard} />
         )}
       </div>
 
@@ -1093,6 +1160,145 @@ const AdherenceView: React.FC<{
   </div>
   );
 };
+
+// ---- Leaderboard ----
+// Both views below are pure presentational re-sorts of data the Performance
+// tab already fetched/computed — no fetch of their own, so no loading/error/
+// stale states to render; whatever's already on screen elsewhere is exactly
+// what's ranked here.
+
+// Gold/silver/bronze for the top 3 ranks.
+const RANK_MEDALS: Record<1 | 2 | 3, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const RANK_ROW_TINTS: Record<1 | 2 | 3, string> = {
+  1: 'bg-amber-50/60 hover:bg-amber-50/60',
+  2: 'bg-stone-100 hover:bg-stone-100',
+  3: 'bg-orange-50/60 hover:bg-orange-50/60',
+};
+const medalRank = (rank: number): 1 | 2 | 3 | null => (rank === 1 || rank === 2 || rank === 3 ? rank : null);
+const rankRowTint = (rank: number): string => {
+  const medal = medalRank(rank);
+  return medal ? RANK_ROW_TINTS[medal] : '';
+};
+
+const RankCell: React.FC<{ rank: number }> = ({ rank }) => {
+  const medal = medalRank(rank);
+  return (
+    <TableCell className="whitespace-nowrap font-mono text-stone-400">
+      {medal ? (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="text-base leading-none" aria-hidden="true">{RANK_MEDALS[medal]}</span>#{rank}
+        </span>
+      ) : (
+        `#${rank}`
+      )}
+    </TableCell>
+  );
+};
+
+// No virtualization: a tenant's active RM count here tops out at a few
+// hundred, so a plain .map() over the DOM is cheap — virtualizing a list
+// this size would be pure overhead with nothing to show for it.
+const LeaderboardView: React.FC<{
+  rows: RmPerformanceRow[];
+  activeUserId: string | null;
+}> = ({ rows, activeUserId }) => (
+  <div className="overflow-x-auto rounded-xl border border-stone-200">
+    <Table className="min-w-[720px]">
+      <TableHeader>
+        <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
+          <TableHead className="text-white">Rank</TableHead>
+          <TableHead className="text-white">RM</TableHead>
+          <TableHead className="text-right text-white">vs Target</TableHead>
+          <TableHead className="text-right text-white">Achieved</TableHead>
+          <TableHead className="text-right text-white">Target</TableHead>
+          <TableHead className="text-right text-white">Touches</TableHead>
+          <TableHead className="text-right text-white">Unique Leads</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody className="bg-white">
+        {rows.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={7} className="py-8 text-center text-sm text-stone-400">
+              No activity for this selection yet.
+            </TableCell>
+          </TableRow>
+        ) : (
+          rows.map((row, index) => {
+            const rank = index + 1;
+            const isYou = row.rmUserId === activeUserId;
+            return (
+              <TableRow key={row.rmUserId} className={cn(isYou ? 'bg-amber-50 hover:bg-amber-50' : rankRowTint(rank))}>
+                <RankCell rank={rank} />
+                <TableCell className="whitespace-nowrap font-semibold text-stone-900">
+                  {row.name}
+                  {isYou && <span className="ml-1.5 text-xs font-normal text-amber-600">(you)</span>}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono font-semibold text-emerald-700">
+                  {formatVsTarget(row.achieved, row.target)}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono">{row.achieved}</TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono text-stone-400">{row.target}</TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono">{row.touches}</TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono underline decoration-stone-300">
+                  {row.uniqueLeads}
+                </TableCell>
+              </TableRow>
+            );
+          })
+        )}
+      </TableBody>
+    </Table>
+  </div>
+);
+
+interface ManagerLeaderboardRow {
+  manager: string;
+  achieved: number;
+  target: number;
+  rmCount: number;
+}
+
+const ManagerLeaderboardView: React.FC<{ rows: ManagerLeaderboardRow[] }> = ({ rows }) => (
+  <div className="overflow-x-auto rounded-xl border border-stone-200">
+    <Table className="min-w-[640px]">
+      <TableHeader>
+        <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
+          <TableHead className="text-white">Rank</TableHead>
+          <TableHead className="text-white">Manager</TableHead>
+          <TableHead className="text-right text-white">vs Target</TableHead>
+          <TableHead className="text-right text-white">Achieved</TableHead>
+          <TableHead className="text-right text-white">Target</TableHead>
+          <TableHead className="text-right text-white">RMs</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody className="bg-white">
+        {rows.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={6} className="py-8 text-center text-sm text-stone-400">
+              No manager activity for this selection yet.
+            </TableCell>
+          </TableRow>
+        ) : (
+          rows.map((row, index) => {
+            const rank = index + 1;
+            return (
+              <TableRow key={row.manager} className={rankRowTint(rank)}>
+                <RankCell rank={rank} />
+                <TableCell className="whitespace-nowrap font-semibold text-stone-900">{row.manager}</TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono font-semibold text-emerald-700">
+                  {formatVsTarget(row.achieved, row.target)}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono">{row.achieved}</TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono text-stone-400">{row.target}</TableCell>
+                <TableCell className="whitespace-nowrap text-right font-mono">{row.rmCount}</TableCell>
+              </TableRow>
+            );
+          })
+        )}
+      </TableBody>
+    </Table>
+  </div>
+);
 
 type AdherenceSortKey =
   | 'name'
