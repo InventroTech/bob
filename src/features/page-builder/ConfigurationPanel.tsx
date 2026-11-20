@@ -241,6 +241,8 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     viewMode?: 'manager' | 'asm' | 'rm';
     /** RM PRD Analytics: Role.key values that count as "manager" for the Manager filter. */
     managerRoles?: string[];
+    /** RM PRD Analytics: shows a "Manager Leaderboard" tab ranking each manager by their team's total achieved / target. */
+    showManagerLeaderboard?: boolean;
     /** Ticket table: list stays empty until at least one filter is applied. */
     requireFiltersBeforeShowing?: boolean;
     /** Ticket table: Role.key values the rule above applies to (empty = everyone). */
@@ -330,6 +332,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     visibleFilters: (initialConfig as any).visibleFilters ?? undefined,
     viewMode: (initialConfig as any).viewMode ?? 'manager',
     managerRoles: (initialConfig as any).managerRoles ?? undefined,
+    showManagerLeaderboard: (initialConfig as any).showManagerLeaderboard ?? false,
     requireFiltersBeforeShowing: (initialConfig as any).requireFiltersBeforeShowing ?? false,
     requireFiltersRoles: (initialConfig as any).requireFiltersRoles ?? undefined,
   });

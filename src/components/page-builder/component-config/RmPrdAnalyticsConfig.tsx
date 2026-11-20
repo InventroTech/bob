@@ -28,6 +28,7 @@ interface RmPrdAnalyticsConfigProps {
     visibleFilters?: Partial<Record<RmPrdFilterKey, boolean>>;
     viewMode?: RmPrdViewMode;
     managerRoles?: string[];
+    showManagerLeaderboard?: boolean;
   };
   handleInputChange: (field: string, value: string | number | boolean | Record<string, boolean> | string[]) => void;
 }
@@ -135,6 +136,26 @@ export const RmPrdAnalyticsConfig: React.FC<RmPrdAnalyticsConfigProps> = ({
             ))}
           </div>
         </div>
+
+        {localConfig.viewMode !== "rm" && (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-border p-3">
+            <div className="space-y-1">
+              <Label htmlFor="showManagerLeaderboard" className="text-sm font-normal">
+                Show Manager Leaderboard
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Adds a "Manager Leaderboard" tab ranking each manager (from the Manager Roles picked
+                below) by their team's total achieved ÷ target. Off by default — only turn this on for
+                the pages meant to show it.
+              </p>
+            </div>
+            <Switch
+              id="showManagerLeaderboard"
+              checked={localConfig.showManagerLeaderboard === true}
+              onCheckedChange={(next) => handleInputChange("showManagerLeaderboard", next)}
+            />
+          </div>
+        )}
 
         {localConfig.viewMode !== "rm" && (
           <div className="space-y-2">
